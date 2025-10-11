@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collector Street - Profilo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <nav>
+        <h1>Collector Street</h1>
+        <div class="actions">
+            <a href="/" class="nav-btn">Collezione</a>
+            <button id="logoutBtn">Logout</button>
+        </div>
+    </nav>
+    <section class="profile-container">
+        <h2>Il tuo profilo</h2>
+        {% if updated %}
+            <p class="success-msg">Profilo aggiornato con successo.</p>
+        {% endif %}
+        <div class="profile-card">
+            <div class="profile-info">
+                {% if user.profile_image_path %}
+                    <img class="profile-image" src="{{ url_for('static', filename=user.profile_image_path) }}" alt="Immagine profilo">
+                {% else %}
+                    <div class="profile-placeholder">Nessuna immagine</div>
+                {% endif %}
+                <h3>{{ user.nickname or user.username }}</h3>
+            </div>
+            <div class="profile-links">
+                <h4>Link marketplace</h4>
+                <ul>
+                    {% if user.vinted_link %}
+                        <li><a href="{{ user.vinted_link }}" target="_blank">Vinted</a></li>
+                    {% endif %}
+                    {% if user.cardmarket_link %}
+                        <li><a href="{{ user.cardmarket_link }}" target="_blank">Card Market</a></li>
+                    {% endif %}
+                    {% if user.ebay_link %}
+                        <li><a href="{{ user.ebay_link }}" target="_blank">eBay</a></li>
+                    {% endif %}
+                    {% if user.facebook_link %}
+                        <li><a href="{{ user.facebook_link }}" target="_blank">Facebook Marketplace</a></li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+        <hr>
+        <h3>Modifica profilo</h3>
+        <form method="POST" enctype="multipart/form-data" class="profile-form">
+            <label for="nickname">Nickname</label>
+            <input type="text" name="nickname" id="nickname" value="{{ user.nickname or '' }}">
+            <label for="profile_image">Immagine profilo</label>
+            <input type="file" name="profile_image" id="profile_image" accept="image/*">
+            <label for="vinted_link">Link Vinted</label>
+            <input type="url" name="vinted_link" id="vinted_link" value="{{ user.vinted_link or '' }}">
+            <label for="cardmarket_link">Link Card Market</label>
+            <input type="url" name="cardmarket_link" id="cardmarket_link" value="{{ user.cardmarket_link or '' }}">
+            <label for="ebay_link">Link eBay</label>
+            <input type="url" name="ebay_link" id="ebay_link" value="{{ user.ebay_link or '' }}">
+            <label for="facebook_link">Link Facebook Marketplace</label>
+            <input type="url" name="facebook_link" id="facebook_link" value="{{ user.facebook_link or '' }}">
+            <button type="submit">Salva modifiche</button>
+        </form>
+    </section>
+    <script>
+        // Logout button handler
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            await fetch('/logout', { method: 'POST' });
+            window.location.href = '/';
+        });
+    </script>
+</body>
+</html>
