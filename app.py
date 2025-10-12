@@ -134,18 +134,26 @@ def create_app(db_path: str = "database.db") -> Flask:
         # If currencies are missing or identical, return original amount
         if not from_currency or not to_currency or from_currency == to_currency:
             return amount
-        try:
-            # Use exchangerate.host to perform conversion
-            url = f"https://api.exchangerate.host/convert?from={from_currency}&to={to_currency}&amount={amount}"
-            resp = requests.get(url, timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                result = data.get('result')
-                if result is not None:
-                    return float(result)
-        except Exception:
-            pass
-        # Fallback to original amount if anything goes wrong
+        # Static approximate exchange rates relative to EUR. These can be updated as needed.
+        # Values represent how many EUR equals one unit of the currency. Example: 1 USD ≈ 0.93 EUR.
+        rates = {
+            'EUR': 1.0,
+            'USD': 0.93,
+            'JPY': 0.0057,
+            'GBP': 1.17,
+            'CNY': 0.13
+        }
+
+        from_cur = from_currency.upper()
+        to_cur = to_currency.upper()
+        if from_cur in rates and to_cur in rates:
+            # Convert amount to EUR then to target
+            try:
+                eur_amount = amount * rates[from_cur]
+                return eur_amount / rates[to_cur]
+            except Exception:
+                return amount
+        # If unknown currency, return original amount
         return amount
 
     def compute_profile_stats(user: dict) -> dict:
@@ -406,7 +414,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         cur.execute(
             """
             INSERT INTO items (name, description, category, purchase_price, purchase_price_curr_ref, purchase_date, sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
             """,
             (name, description, category, purchase_price, purchase_price_curr_ref, purchase_date, sale_price, sale_date, marketplace_link, tags, quantity, condition_field, currency, language)
         )
