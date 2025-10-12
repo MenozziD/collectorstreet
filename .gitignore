@@ -1,0 +1,24 @@
+# Python cache directories and compiled files
+__pycache__/
+*.py[cod]
+*.so
+
+# Database file (SQLite)
+collector_app/database.db
+
+# Uploaded files: keep the directory but ignore its contents
+collector_app/static/uploads/*
+!collector_app/static/uploads/.gitkeep
+
+# Ignore packaged archives
+*.zip
+
+# Node modules (if present)
+node_modules/
+
+# Environment files
+.env
+
+# Miscellaneous system files
+.DS_Store
+Thumbs.db
