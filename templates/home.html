@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collector Street - Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <nav>
+        <h1>Collector Street</h1>
+        <div class="actions">
+            <!-- Navigation links -->
+            <a href="/home" class="nav-btn">Home</a>
+            <a href="/" class="nav-btn">Collezione</a>
+            <a href="/profile" class="nav-btn">Profilo</a>
+            <button id="logoutBtn">Logout</button>
+        </div>
+    </nav>
+    <section class="home-container">
+        <h2>Benvenuto</h2>
+        <!-- Summary statistics panel -->
+        <div class="home-stats">
+            <h3>Statistiche collezione</h3>
+            <button type="button" id="updateStatsBtn" class="update-stats-btn">Aggiorna statistiche</button>
+            <ul class="stats-list" id="statsList">
+                <li><strong>Totale speso:</strong>
+                    {% if stats.currency %}
+                        <span id="statTotalSpent">{{ stats.total_spent | round(2) }}</span> {{ stats.currency }}
+                    {% else %}
+                        <span id="statTotalSpent">-</span>
+                    {% endif %}
+                </li>
+                <li><strong>Totale venduto:</strong>
+                    {% if stats.currency %}
+                        <span id="statTotalSold">{{ stats.total_sold | round(2) }}</span> {{ stats.currency }}
+                    {% else %}
+                        <span id="statTotalSold">-</span>
+                    {% endif %}
+                </li>
+                <li><strong>ROI:</strong>
+                    {% if stats.currency and stats.roi is not none %}
+                        <span id="statROI">{{ (stats.roi * 100) | round(2) }}</span>%
+                    {% else %}
+                        <span id="statROI">-</span>
+                    {% endif %}
+                </li>
+                <li><strong>Data inizio collezione:</strong> <span id="statStartDate">{{ stats.start_date or '-' }}</span></li>
+                <li><strong>Giorni in collezione:</strong> <span id="statDays">{{ stats.days_in_collection or '-' }}</span></li>
+            </ul>
+        </div>
+    </section>
+    <script>
+        // Logout button handler
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            await fetch('/logout', { method: 'POST' });
+            window.location.href = '/';
+        });
+        // Update statistics via API
+        document.getElementById('updateStatsBtn').addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/profile/stats');
+                if (res.ok) {
+                    const stats = await res.json();
+                    // Update DOM elements
+                    const totalSpentSpan = document.getElementById('statTotalSpent');
+                    const totalSoldSpan = document.getElementById('statTotalSold');
+                    const roiSpan = document.getElementById('statROI');
+                    const startDateSpan = document.getElementById('statStartDate');
+                    const daysSpan = document.getElementById('statDays');
+                    if (stats.currency) {
+                        totalSpentSpan.textContent = stats.total_spent.toFixed(2);
+                        totalSoldSpan.textContent = stats.total_sold.toFixed(2);
+                        if (stats.roi !== null && stats.roi !== undefined) {
+                            roiSpan.textContent = (stats.roi * 100).toFixed(2);
+                        } else {
+                            roiSpan.textContent = '-';
+                        }
+                    } else {
+                        totalSpentSpan.textContent = '-';
+                        totalSoldSpan.textContent = '-';
+                        roiSpan.textContent = '-';
+                    }
+                    startDateSpan.textContent = stats.start_date || '-';
+                    daysSpan.textContent = stats.days_in_collection || '-';
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        });
+    </script>
+</body>
+</html>

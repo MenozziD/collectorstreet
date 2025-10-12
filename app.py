@@ -67,11 +67,12 @@ def create_app(db_path: str = "database.db") -> Flask:
                 cur.execute(f"ALTER TABLE users ADD COLUMN {column} {col_type}")
             except sqlite3.OperationalError:
                 pass
-        # Create items table
+        # Create items table. Each item is linked to the user who created it via the user_id field.
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 name TEXT NOT NULL,
                 description TEXT,
                 category TEXT,
@@ -84,12 +85,17 @@ def create_app(db_path: str = "database.db") -> Flask:
                 tags TEXT,
                 image_path TEXT,
                 quantity INTEGER,
-                condition TEXT
+                condition TEXT,
+                currency TEXT,
+                language TEXT,
+                FOREIGN KEY(user_id) REFERENCES users(id)
             )
             """
         )
-        # Attempt to add missing columns for backward compatibility
+        # Attempt to add missing columns for backward compatibility. This ensures that
+        # databases created before new fields were introduced continue to work.
         for column, col_type in [
+            ('user_id', 'INTEGER'),
             ('image_path', 'TEXT'),
             ('quantity', 'INTEGER'),
             ('condition', 'TEXT'),
@@ -104,8 +110,18 @@ def create_app(db_path: str = "database.db") -> Flask:
                 pass
         # Insert default admin user if not exists
         cur.execute("SELECT id FROM users WHERE username = ?", ('admin',))
-        if cur.fetchone() is None:
+        admin_row = cur.fetchone()
+        if admin_row is None:
             cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", ('admin', 'admin'))
+            admin_id = cur.lastrowid
+        else:
+            admin_id = admin_row['id'] if isinstance(admin_row, sqlite3.Row) else admin_row[0]
+        # For existing items created before user_id column existed, assign them to the admin user
+        try:
+            cur.execute("UPDATE items SET user_id = ? WHERE user_id IS NULL", (admin_id,))
+        except Exception:
+            # If the column doesn't exist yet, ignore
+            pass
         conn.commit()
         conn.close()
 
@@ -139,11 +155,10 @@ def create_app(db_path: str = "database.db") -> Flask:
         rates = {
             'EUR': 1.0,
             'USD': 0.93,
-            'JPY': 0.0057,
+            'JPY': 0.0062,
             'GBP': 1.17,
             'CNY': 0.13
         }
-
         from_cur = from_currency.upper()
         to_cur = to_currency.upper()
         if from_cur in rates and to_cur in rates:
@@ -180,10 +195,14 @@ def create_app(db_path: str = "database.db") -> Flask:
         total_spent: float = 0.0
         total_sold: float = 0.0
         first_date = None
-        # Fetch all items once
+        # Fetch only the items belonging to this user
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM items")
+        user_id = user.get('id') if user else None
+        if user_id:
+            cur.execute("SELECT * FROM items WHERE user_id = ?", (user_id,))
+        else:
+            cur.execute("SELECT * FROM items WHERE 1=0")  # no items for anonymous user
         items = cur.fetchall()
         conn.close()
         for item in items:
@@ -309,9 +328,17 @@ def create_app(db_path: str = "database.db") -> Flask:
         category = request.args.get('category', '', type=str).strip().lower()
         tags_param = request.args.get('tags', '', type=str).strip().lower()
         tags_filter = [t.strip() for t in tags_param.split(',') if t.strip()] if tags_param else []
+        # Only retrieve items belonging to the logged-in user
+        user_id = session.get('user_id')
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM items")
+        if user_id is not None:
+            cur.execute("SELECT * FROM items WHERE user_id = ?", (user_id,))
+        else:
+            # In the unlikely case there is no user_id, return empty list
+            items = []
+            conn.close()
+            return jsonify([])
         items = cur.fetchall()
         conn.close()
         result = []
@@ -409,14 +436,36 @@ def create_app(db_path: str = "database.db") -> Flask:
         except Exception:
             # leave as None if conversion fails
             purchase_price_curr_ref = None
+        # Insert a new item associated with the current user. The image_path is stored as NULL on creation.
+        user_id = session.get('user_id')
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO items (name, description, category, purchase_price, purchase_price_curr_ref, purchase_date, sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+            INSERT INTO items (
+                user_id, name, description, category, purchase_price, purchase_price_curr_ref, purchase_date,
+                sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, description, category, purchase_price, purchase_price_curr_ref, purchase_date, sale_price, sale_date, marketplace_link, tags, quantity, condition_field, currency, language)
+            (
+                user_id,
+                name,
+                description,
+                category,
+                purchase_price,
+                purchase_price_curr_ref,
+                purchase_date,
+                sale_price,
+                sale_date,
+                marketplace_link,
+                tags,
+                None,  # image_path set to NULL on creation
+                quantity,
+                condition_field,
+                currency,
+                language
+            )
         )
         conn.commit()
         item_id = cur.lastrowid
@@ -490,10 +539,18 @@ def create_app(db_path: str = "database.db") -> Flask:
                     values.append(image_rel_path)
             if not fields:
                 return jsonify({'error': 'No fields to update'}), 400
+            # Append conditions for item id and user ownership
             values.append(item_id)
+            # Ensure only the owner can update the item
+            user_id_ses = session.get('user_id')
+            values.append(user_id_ses)
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute(f"UPDATE items SET {', '.join(fields)} WHERE id = ?", values)
+            cur.execute(f"UPDATE items SET {', '.join(fields)} WHERE id = ? AND user_id = ?", values)
+            if cur.rowcount == 0:
+                # No rows updated implies item does not belong to user or does not exist
+                conn.close()
+                return jsonify({'error': 'Item not found or unauthorized'}), 404
             conn.commit()
             conn.close()
             return jsonify({'message': 'Item updated'})
@@ -532,10 +589,16 @@ def create_app(db_path: str = "database.db") -> Flask:
                 values.append(None)
             if not fields:
                 return jsonify({'error': 'No fields to update'}), 400
+            # Append conditions for item id and user ownership
             values.append(item_id)
+            user_id_ses = session.get('user_id')
+            values.append(user_id_ses)
             conn = get_db_connection()
             cur = conn.cursor()
-            cur.execute(f"UPDATE items SET {', '.join(fields)} WHERE id = ?", values)
+            cur.execute(f"UPDATE items SET {', '.join(fields)} WHERE id = ? AND user_id = ?", values)
+            if cur.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'Item not found or unauthorized'}), 404
             conn.commit()
             conn.close()
             return jsonify({'message': 'Item updated'})
@@ -546,9 +609,14 @@ def create_app(db_path: str = "database.db") -> Flask:
         """
         Delete an item by ID.
         """
+        # Delete only if the item belongs to the current user
+        user_id = session.get('user_id')
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("DELETE FROM items WHERE id = ?", (item_id,))
+        cur.execute("DELETE FROM items WHERE id = ? AND user_id = ?", (item_id, user_id))
+        if cur.rowcount == 0:
+            conn.close()
+            return jsonify({'error': 'Item not found or unauthorized'}), 404
         conn.commit()
         conn.close()
         return jsonify({'message': 'Item deleted'})
@@ -611,6 +679,142 @@ def create_app(db_path: str = "database.db") -> Flask:
         stats = compute_profile_stats(user_dict)
         return jsonify(stats)
 
+    # Admin endpoints to manage users. Only the admin user (username 'admin') can perform these operations.
+    def require_admin(f):
+        """Decorator to restrict access to admin-only endpoints."""
+        from functools import wraps
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not session.get('logged_in'):
+                return jsonify({'error': 'Unauthorized'}), 401
+            if session.get('username') != 'admin':
+                return jsonify({'error': 'Forbidden'}), 403
+            return f(*args, **kwargs)
+        return decorated
+
+    @app.route('/api/admin/users', methods=['GET'])
+    @require_login
+    @require_admin
+    def admin_get_users():
+        """
+        Return a list of all users for administration purposes. Visible only to admin.
+        """
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, nickname, ref_currency FROM users")
+        users = [dict(row) for row in cur.fetchall()]
+        conn.close()
+        return jsonify(users)
+
+    @app.route('/api/admin/users', methods=['POST'])
+    @require_login
+    @require_admin
+    def admin_create_user():
+        """
+        Create a new user. Expects JSON body with 'username' and 'password' fields.
+        Optionally accepts 'nickname' and 'ref_currency'.
+        """
+        data = request.get_json() or {}
+        username = (data.get('username') or '').strip()
+        password = (data.get('password') or '').strip()
+        nickname = data.get('nickname')
+        ref_currency = data.get('ref_currency')
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO users (username, password, nickname, ref_currency) VALUES (?, ?, ?, ?)",
+                (username, password, nickname, ref_currency)
+            )
+            conn.commit()
+            user_id = cur.lastrowid
+            conn.close()
+            return jsonify({'id': user_id}), 201
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({'error': 'Username already exists'}), 400
+
+    @app.route('/api/admin/users/<int:uid>', methods=['PUT'])
+    @require_login
+    @require_admin
+    def admin_update_user(uid: int):
+        """
+        Update an existing user. Expects JSON with fields to update: 'username', 'password', 'nickname', 'ref_currency'.
+        Username uniqueness is enforced. Password update is optional.
+        """
+        data = request.get_json() or {}
+        fields = []
+        values = []
+        if 'username' in data and data['username']:
+            fields.append("username = ?")
+            values.append(data['username'])
+        if 'password' in data and data['password']:
+            fields.append("password = ?")
+            values.append(data['password'])
+        if 'nickname' in data:
+            fields.append("nickname = ?")
+            values.append(data['nickname'])
+        if 'ref_currency' in data:
+            fields.append("ref_currency = ?")
+            values.append(data['ref_currency'])
+        if not fields:
+            return jsonify({'error': 'No fields to update'}), 400
+        values.append(uid)
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
+            if cur.rowcount == 0:
+                conn.close()
+                return jsonify({'error': 'User not found'}), 404
+            conn.commit()
+            conn.close()
+            return jsonify({'message': 'User updated'})
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({'error': 'Username already exists'}), 400
+
+    @app.route('/api/admin/users/<int:uid>', methods=['DELETE'])
+    @require_login
+    @require_admin
+    def admin_delete_user(uid: int):
+        """
+        Delete a user by ID. Admin cannot delete themselves.
+        Deleting a user also deletes their items.
+        """
+        # Prevent admin from deleting themselves
+        admin_id = session.get('user_id')
+        if uid == admin_id:
+            return jsonify({'error': 'Cannot delete currently logged in admin'}), 400
+        conn = get_db_connection()
+        cur = conn.cursor()
+        # Delete user and cascade delete items
+        cur.execute("DELETE FROM users WHERE id = ?", (uid,))
+        # Also delete items belonging to this user
+        cur.execute("DELETE FROM items WHERE user_id = ?", (uid,))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'User deleted'})
+
+    @app.route('/home')
+    @require_login
+    def home_page():
+        """
+        Display the home page for the logged-in user. This shows a summary
+        of collection statistics similar to the profile page without the edit form.
+        """
+        user_id = session.get('user_id')
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        conn.close()
+        user_dict = dict(user) if user else {}
+        stats = compute_profile_stats(user_dict)
+        return render_template('home.html', user=user_dict, stats=stats)
+
     @app.route('/api/export/csv', methods=['GET'])
     @require_login
     def export_csv():
@@ -625,7 +829,11 @@ def create_app(db_path: str = "database.db") -> Flask:
         tags_filter = [t.strip() for t in tags_param.split(',') if t.strip()] if tags_param else []
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM items")
+        # Filter items by logged-in user
+        user_id = session.get('user_id')
+        if user_id is None:
+            return jsonify({'error': 'Unauthorized'}), 401
+        cur.execute("SELECT * FROM items WHERE user_id = ?", (user_id,))
         items = cur.fetchall()
         conn.close()
         output = io.StringIO()
@@ -743,7 +951,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             user_dict = dict(user) if user else {}
             # Compute statistics for display
             stats = compute_profile_stats(user_dict)
-            return render_template('profile.html', user=user_dict, updated=True, stats=stats)
+            is_admin = user_dict.get('username') == 'admin'
+            return render_template('profile.html', user=user_dict, updated=True, stats=stats, is_admin=is_admin)
         else:
             # GET request: fetch user and compute stats
             cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -751,7 +960,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             conn.close()
             user_dict = dict(user) if user else {}
             stats = compute_profile_stats(user_dict)
-            return render_template('profile.html', user=user_dict, stats=stats)
+            is_admin = user_dict.get('username') == 'admin'
+            return render_template('profile.html', user=user_dict, stats=stats, is_admin=is_admin)
 
     return app
 
