@@ -8,7 +8,7 @@ collector_app/database.db
 
 # Uploaded files: keep the directory but ignore its contents
 collector_app/static/uploads/*
-!collector_app/static/uploads/.gitkeep
+#!collector_app/static/uploads/.gitkeep
 
 # Ignore packaged archives
 *.zip
@@ -22,3 +22,11 @@ node_modules/
 # Miscellaneous system files
 .DS_Store
 Thumbs.db
+app.py
+static/uploads/20251011164118863775.jpg
+static/uploads/20251011165306581516.jpg
+static/uploads/20251011170257827369.jpg
+static/uploads/20251011173946703918.jpg
+static/uploads/20251011230400363870.jpg
+static/uploads/20251011232031369106.jpg
+database.db
