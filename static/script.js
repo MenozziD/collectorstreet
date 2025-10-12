@@ -5,7 +5,11 @@ const categoryIcons = {
     'videogames': 'gamepad.svg',
     'console': 'tv.svg',
     'action figure': 'robot.svg',
-    'trading card': 'tradingcard.svg'
+    'trading card': 'tradingcard.svg',
+    'cd': 'cd.svg',
+    'vynil': 'vynil.svg',
+    'other': 'other.svg',
+    'sticker': 'sticker.svg',
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -240,12 +244,14 @@ function renderItems(items) {
         icon.alt = 'Icona categoria';
         titleWrapper.appendChild(icon);
         const nameSpan = document.createElement('span');
+        nameSpan.id = "nameSpan";
         nameSpan.textContent = item.name;
         nameSpan.style.marginLeft = '6px';
         titleWrapper.appendChild(nameSpan);
         card.appendChild(titleWrapper);
         if (item.description) {
             const desc = document.createElement('p');
+            desc.id = "desc-field";
             desc.textContent = item.description;
             card.appendChild(desc);
         }

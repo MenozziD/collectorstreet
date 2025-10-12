@@ -108,6 +108,17 @@ nav .actions button:hover {
     font-size: 0.9em;
 }
 
+#desc-field {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 80px;
+}
+
+#nameSpan {
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
 .item-card a {
     color: #006c7b;
     text-decoration: none;
@@ -166,6 +177,7 @@ nav .actions button:hover {
 /* Immagine dell'item */
 .item-image {
     width: 100%;
+    min-height: 150px;
     max-height: 150px;
     object-fit: cover;
     border-radius: 4px;
@@ -263,7 +275,7 @@ nav .actions button:hover {
 }
 
 .modal-content textarea {
-    min-height: 80px;
+    min-height: 100px;
 }
 
 .modal-content button[type="submit"] {
