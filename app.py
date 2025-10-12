@@ -89,7 +89,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('image_path', 'TEXT'),
             ('quantity', 'INTEGER'),
             ('condition', 'TEXT'),
-            ('currency', 'TEXT')
+            ('currency', 'TEXT'),
+            ('language', 'TEXT')
         ]:
             try:
                 cur.execute(f"ALTER TABLE items ADD COLUMN {column} {col_type}")
@@ -213,6 +214,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'id': item['id'],
                 'name': item['name'],
                 'description': item['description'],
+                'language': item['language'],
                 'category': item['category'],
                 'purchase_price': item['purchase_price'],
                 'purchase_date': item['purchase_date'],
@@ -254,14 +256,15 @@ def create_app(db_path: str = "database.db") -> Flask:
         quantity = data.get('quantity')
         condition_field = data.get('condition')
         currency = data.get('currency')
+        language = data.get('language')
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO items (name, description, category, purchase_price, purchase_date, sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+            INSERT INTO items (name, description, category, purchase_price, purchase_date, sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
             """,
-            (name, description, category, purchase_price, purchase_date, sale_price, sale_date, marketplace_link, tags, quantity, condition_field, currency)
+            (name, description, category, purchase_price, purchase_date, sale_price, sale_date, marketplace_link, tags, quantity, condition_field, currency, language)
         )
         conn.commit()
         item_id = cur.lastrowid
@@ -293,7 +296,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'tags': form.get('tags'),
                 'quantity': int(form.get('quantity')) if form.get('quantity') else None,
                 'condition': form.get('condition'),
-                'currency': form.get('currency')
+                'currency': form.get('currency'),
+                'language': form.get('language')
             }
             for key, value in mapping.items():
                 if value is not None and value != '':
@@ -323,7 +327,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             data = request.get_json() or {}
             fields = []
             values = []
-            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency']:
+            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language']:
                 if key in data and data[key] is not None:
                     fields.append(f"{key} = ?")
                     values.append(data[key])
@@ -371,7 +375,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         writer = csv.writer(output)
         # Write header
         writer.writerow([
-            'ID', 'Name', 'Description', 'Category', 'Purchase Price', 'Currency', 'Purchase Date', 'Sale Price', 'Sale Date', 'Marketplace Link',
+            'ID', 'Name', 'Description', 'Language', 'Category', 'Purchase Price', 'Currency', 'Purchase Date', 'Sale Price', 'Sale Date', 'Marketplace Link',
             'Tags', 'Image Path', 'Quantity', 'Condition', 'Time in Collection (days)', 'ROI'
         ])
         for item in items:
@@ -400,7 +404,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 except Exception:
                     roi = ''
             writer.writerow([
-                item['id'], item['name'], item['description'], item['category'],
+                item['id'], item['name'], item['description'], item['language'], item['category'],
                 item['purchase_price'], item['currency'], item['purchase_date'], item['sale_price'], item['sale_date'],
                 item['marketplace_link'], item['tags'], item['image_path'], item['quantity'], item['condition'],
                 time_in_collection, roi
@@ -461,10 +465,12 @@ def create_app(db_path: str = "database.db") -> Flask:
             if profile_image and profile_image.filename:
                 ext = os.path.splitext(profile_image.filename)[1].lower()
                 if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']:
-                    unique_name = f"profile_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}{ext}"
+                    # unique_name = f"profile_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}{ext}"
+                    unique_name = profile_image.filename
                     save_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
                     profile_image.save(save_path)
-                    image_rel_path = os.path.relpath(save_path, os.path.join(os.path.dirname(__file__), 'static'))
+                    #image_rel_path = os.path.relpath(save_path, os.path.join(os.path.dirname(__file__), 'static'))
+                    image_rel_path = f"uploads/{unique_name}"
                     fields.append('profile_image_path = ?')
                     values.append(image_rel_path)
             if fields:
@@ -480,7 +486,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
             user = cur.fetchone()
             conn.close()
-            return render_template('profile.html', user=user)
+            user_dict = dict(user) if user else {}
+            return render_template('profile.html', user=user_dict)
 
     return app
 

@@ -108,6 +108,71 @@ nav .actions button:hover {
     font-size: 0.9em;
 }
 
+.title-wrapper  {
+    margin-left: 0px;
+    width: 100%;
+    display: flex;
+    
+}
+
+#nameSpan {
+    width: 80%;
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
+#iconlanguage-div {
+    width: 20%;
+    color: white;
+    border: solid 1px #000000;
+    cursor: pointer;
+}
+
+.icon-languageflag {
+    width: 25px;
+    height: 20px;
+    object-fit: cover;
+    display: inline-block;
+}
+
+.icon {
+    width: 25px;
+    height: 20px;
+    object-fit: contain;
+    display: inline-block;
+}
+
+.container {
+    display: grid;
+    row-gap: 2px;
+    width: 22px;
+}
+
+/* Tags
+#img-flag {
+  display: none;
+  cursor: auto;
+}
+
+#img-flag , .flip {
+  padding: 10px;
+  text-align: center;
+  background-color: #04AA6D;
+  color: white;
+  border: solid 1px #a6d8a8;
+  margin: auto;
+  cursor: pointer;  
+}
+
+#iconlanguage-div , .flip {
+  margin: 10px;
+  text-align: center;
+  color: white;
+  border: solid 1px #000000;
+  margin: auto;
+  cursor: pointer;
+ */
+
 #desc-field {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -188,8 +253,16 @@ nav .actions button:hover {
 .icon {
     width: 20px;
     height: 20px;
+    display: block;
+}
+
+/* Icona categoria accanto al titolo 
+.icon {
+    width: 20px;
+    height: 20px;
     display: inline-block;
 }
+*/
 
 /* Login */
 .login-container {

@@ -12,6 +12,14 @@ const categoryIcons = {
     'sticker': 'sticker.svg',
 };
 
+const languageFlags = {
+  'ITA': 'https://flagcdn.com/w20/it.png',
+  'ENG': 'https://flagcdn.com/w20/gb.png',  // o us se preferisci
+  'JAP': 'https://flagcdn.com/w20/jp.png',
+  'KOR': 'https://flagcdn.com/w20/kr.png',
+  'CHS': 'https://flagcdn.com/w20/cn.png'
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     // Se è presente il form di login, gestisci la login; altrimenti inizializza l'applicazione
     const loginForm = document.getElementById('loginForm');
@@ -109,6 +117,7 @@ function initApp() {
         const id = document.getElementById('itemId').value;
         const name = document.getElementById('itemName').value.trim();
         const description = document.getElementById('itemDescription').value.trim();
+        const language = document.getElementById('itemLanguage').value;
         const category = document.getElementById('itemCategory').value.trim();
         const purchasePrice = document.getElementById('purchasePrice').value;
         const purchaseDate = document.getElementById('purchaseDate').value;
@@ -127,6 +136,7 @@ function initApp() {
                 const formData = new FormData();
                 formData.append('name', name);
                 formData.append('description', description);
+                formData.append('language', language);
                 formData.append('category', category);
                 formData.append('purchase_price', purchasePrice);
                 formData.append('purchase_date', purchaseDate);
@@ -149,6 +159,7 @@ function initApp() {
                 const payload = {
                     name,
                     description,
+                    language,
                     category,
                     purchase_price: purchasePrice ? parseFloat(purchasePrice) : null,
                     purchase_date: purchaseDate || null,
@@ -227,10 +238,11 @@ function renderItems(items) {
         }
         // Inserisci icona categoria e titolo
         const title = document.createElement('h3');
+        
         // Contenitore per icona e testo
         const titleWrapper = document.createElement('div');
-        titleWrapper.style.display = 'flex';
-        titleWrapper.style.alignItems = 'center';
+        titleWrapper.className = 'title-wrapper';
+        
         // Icona categoria
         const icon = document.createElement('img');
         icon.className = 'icon';
@@ -242,12 +254,32 @@ function renderItems(items) {
             icon.src = `/static/icons/gamepad.svg`;
         }
         icon.alt = 'Icona categoria';
-        titleWrapper.appendChild(icon);
+        
+        // Icona Lingua
+        const flagImg = document.createElement('img');
+        flagImg.className = 'icon-languageflag';
+        if (item.language && languageFlags[item.language]) {
+            flagImg.src = languageFlags[item.language];
+            flagImg.alt = item.language;
+            flagImg.className = 'icon';
+            flagImg.className = 'language-flag';
+        }
+        
+        // Contenitore Categoria e Lancguage icon
+        const iconlanguageWrapper = document.createElement('div');
+        // iconlanguageWrapper.id = "iconlanguage-div";
+        iconlanguageWrapper.class = "container";
+        iconlanguageWrapper.appendChild(icon);
+        iconlanguageWrapper.appendChild(flagImg);
+
+        titleWrapper.appendChild(iconlanguageWrapper);
         const nameSpan = document.createElement('span');
         nameSpan.id = "nameSpan";
         nameSpan.textContent = item.name;
         nameSpan.style.marginLeft = '6px';
+        nameSpan.style.marginRight = '10px';
         titleWrapper.appendChild(nameSpan);
+
         card.appendChild(titleWrapper);
         if (item.description) {
             const desc = document.createElement('p');
@@ -389,6 +421,7 @@ function openModal(item = null) {
     const itemId = document.getElementById('itemId');
     const itemName = document.getElementById('itemName');
     const itemDescription = document.getElementById('itemDescription');
+    const itemLanguage = document.getElementById('itemLanguage');
     const itemCategory = document.getElementById('itemCategory');
     const purchasePrice = document.getElementById('purchasePrice');
     const purchaseDate = document.getElementById('purchaseDate');
@@ -405,6 +438,7 @@ function openModal(item = null) {
         itemId.value = item.id;
         itemName.value = item.name || '';
         itemDescription.value = item.description || '';
+        itemLanguage.value = item.language || '';
         itemCategory.value = item.category || '';
         purchasePrice.value = item.purchase_price !== null && item.purchase_price !== undefined ? item.purchase_price : '';
         purchaseDate.value = item.purchase_date || '';
@@ -416,7 +450,7 @@ function openModal(item = null) {
         condition.value = item.condition || '';
         // Note: non si può impostare il valore dell'input file per motivi di sicurezza
         imageInput.value = '';
-        currencySelect.value = item.currency || 'EUR';
+        currencySelect.value = item.currency || '';
     } else {
         modalTitle.textContent = 'Nuovo Item';
         clearItemForm();
@@ -433,6 +467,7 @@ function clearItemForm() {
     document.getElementById('itemId').value = '';
     document.getElementById('itemName').value = '';
     document.getElementById('itemDescription').value = '';
+    document.getElementById('itemLanguage').value = '';
     document.getElementById('itemCategory').value = '';
     document.getElementById('purchasePrice').value = '';
     document.getElementById('purchaseDate').value = '';
@@ -443,5 +478,5 @@ function clearItemForm() {
     document.getElementById('quantity').value = '1';
     document.getElementById('condition').value = '';
     document.getElementById('image').value = '';
-    document.getElementById('currency').value = 'EUR';
+    document.getElementById('currency').value = '';
 }
