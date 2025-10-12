@@ -19,6 +19,7 @@
         {% if updated %}
             <p class="success-msg">Profilo aggiornato con successo.</p>
         {% endif %}
+        <!-- Profilo e link -->
         <div class="profile-card">
             <div class="profile-info">
                 {% if user.profile_image_path %}
@@ -47,22 +48,65 @@
             </div>
         </div>
         <hr>
-        <h3>Modifica profilo</h3>
-        <form method="POST" enctype="multipart/form-data" class="profile-form">
-            <label for="nickname">Nickname</label>
-            <input type="text" name="nickname" id="nickname" value="{{ user.nickname or '' }}">
-            <label for="profile_image">Immagine profilo</label>
-            <input type="file" name="profile_image" id="profile_image" accept="image/*">
-            <label for="vinted_link">Link Vinted</label>
-            <input type="url" name="vinted_link" id="vinted_link" value="{{ user.vinted_link or '' }}">
-            <label for="cardmarket_link">Link Card Market</label>
-            <input type="url" name="cardmarket_link" id="cardmarket_link" value="{{ user.cardmarket_link or '' }}">
-            <label for="ebay_link">Link eBay</label>
-            <input type="url" name="ebay_link" id="ebay_link" value="{{ user.ebay_link or '' }}">
-            <label for="facebook_link">Link Facebook Marketplace</label>
-            <input type="url" name="facebook_link" id="facebook_link" value="{{ user.facebook_link or '' }}">
-            <button type="submit">Salva modifiche</button>
-        </form>
+        <!-- Container for edit form and stats side by side -->
+        <div class="profile-columns">
+            <div class="profile-edit">
+                <h3>Modifica profilo</h3>
+                <form method="POST" enctype="multipart/form-data" class="profile-form">
+                    <label for="nickname">Nickname</label>
+                    <input type="text" name="nickname" id="nickname" value="{{ user.nickname or '' }}">
+                    <label for="ref_currency">Valuta di riferimento</label>
+                    <select name="ref_currency" id="ref_currency">
+                        <option value="">Seleziona valuta</option>
+                        <option value="EUR" {% if user.ref_currency == 'EUR' %}selected{% endif %}>EUR</option>
+                        <option value="USD" {% if user.ref_currency == 'USD' %}selected{% endif %}>USD</option>
+                        <option value="JPY" {% if user.ref_currency == 'JPY' %}selected{% endif %}>JPY</option>
+                        <option value="GBP" {% if user.ref_currency == 'GBP' %}selected{% endif %}>GBP</option>
+                        <option value="CNY" {% if user.ref_currency == 'CNY' %}selected{% endif %}>CNY</option>
+                    </select>
+                    <label for="profile_image">Immagine profilo</label>
+                    <input type="file" name="profile_image" id="profile_image" accept="image/*">
+                    <label for="vinted_link">Link Vinted</label>
+                    <input type="url" name="vinted_link" id="vinted_link" value="{{ user.vinted_link or '' }}">
+                    <label for="cardmarket_link">Link Card Market</label>
+                    <input type="url" name="cardmarket_link" id="cardmarket_link" value="{{ user.cardmarket_link or '' }}">
+                    <label for="ebay_link">Link eBay</label>
+                    <input type="url" name="ebay_link" id="ebay_link" value="{{ user.ebay_link or '' }}">
+                    <label for="facebook_link">Link Facebook Marketplace</label>
+                    <input type="url" name="facebook_link" id="facebook_link" value="{{ user.facebook_link or '' }}">
+                    <button type="submit">Salva modifiche</button>
+                </form>
+            </div>
+            <div class="profile-stats">
+                <h3>Statistiche</h3>
+                <button type="button" id="updateStatsBtn" class="update-stats-btn">Aggiorna statistiche</button>
+                <ul class="stats-list" id="statsList">
+                    <li><strong>Totale speso:</strong>
+                        {% if stats.currency %}
+                            <span id="statTotalSpent">{{ stats.total_spent | round(2) }}</span> {{ stats.currency }}
+                        {% else %}
+                            <span id="statTotalSpent">-</span>
+                        {% endif %}
+                    </li>
+                    <li><strong>Totale venduto:</strong>
+                        {% if stats.currency %}
+                            <span id="statTotalSold">{{ stats.total_sold | round(2) }}</span> {{ stats.currency }}
+                        {% else %}
+                            <span id="statTotalSold">-</span>
+                        {% endif %}
+                    </li>
+                    <li><strong>ROI:</strong>
+                        {% if stats.currency and stats.roi is not none %}
+                            <span id="statROI">{{ (stats.roi * 100) | round(2) }}</span>%
+                        {% else %}
+                            <span id="statROI">-</span>
+                        {% endif %}
+                    </li>
+                    <li><strong>Data inizio collezione:</strong> <span id="statStartDate">{{ stats.start_date or '-' }}</span></li>
+                    <li><strong>Giorni in collezione:</strong> <span id="statDays">{{ stats.days_in_collection or '-' }}</span></li>
+                </ul>
+            </div>
+        </div>
     </section>
     <script>
         // Logout button handler

@@ -50,11 +50,15 @@
                     <option value="EUR">EUR</option>
                     <option value="USD">USD</option>
                     <option value="JPY">JPY</option>
+                    <option value="GBP">GBP</option>
+                    <option value="CNY">CNY</option>
                 </select>
                 <input type="number" step="0.01" id="purchasePrice" placeholder="Prezzo di acquisto">
                 <input type="date" id="purchaseDate" placeholder="Data di acquisto">
                 <input type="number" step="0.01" id="salePrice" placeholder="Prezzo di vendita">
                 <input type="date" id="saleDate" placeholder="Data di vendita">
+                <!-- Prezzo di acquisto in valuta di riferimento (opzionale, può essere ricalcolato dal server) -->
+                <input type="number" step="0.01" id="purchasePriceRef" placeholder="Prezzo acquisto (valuta rif)">
                 <input type="url" id="marketplaceLink" placeholder="Link marketplace">
                 <!-- Nuovi campi -->
                 <input type="number" min="1" id="quantity" placeholder="Quantità" value="1">

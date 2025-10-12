@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
 import sqlite3
 import csv
@@ -47,7 +48,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 vinted_link TEXT,
                 cardmarket_link TEXT,
                 ebay_link TEXT,
-                facebook_link TEXT
+                facebook_link TEXT,
+                ref_currency TEXT
             )
             """
         )
@@ -58,7 +60,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('vinted_link', 'TEXT'),
             ('cardmarket_link', 'TEXT'),
             ('ebay_link', 'TEXT'),
-            ('facebook_link', 'TEXT')
+            ('facebook_link', 'TEXT'),
+            ('ref_currency', 'TEXT')
         ]:
             try:
                 cur.execute(f"ALTER TABLE users ADD COLUMN {column} {col_type}")
@@ -73,6 +76,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 description TEXT,
                 category TEXT,
                 purchase_price REAL,
+                purchase_price_curr_ref REAL,
                 purchase_date TEXT,
                 sale_price REAL,
                 sale_date TEXT,
@@ -90,7 +94,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('quantity', 'INTEGER'),
             ('condition', 'TEXT'),
             ('currency', 'TEXT'),
-            ('language', 'TEXT')
+            ('language', 'TEXT'),
+            ('purchase_price_curr_ref', 'REAL')
         ]:
             try:
                 cur.execute(f"ALTER TABLE items ADD COLUMN {column} {col_type}")
@@ -110,6 +115,123 @@ def create_app(db_path: str = "database.db") -> Flask:
     app.config['UPLOAD_FOLDER'] = upload_folder
     # Initialize database on app creation
     init_db()
+
+    def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
+        """
+        Convert an amount from one currency to another using exchangerate.host free API.
+        If conversion fails or currencies are the same, returns the original amount.
+
+        Args:
+            amount (float): The amount to convert.
+            from_currency (str): ISO currency code of the source amount.
+            to_currency (str): ISO currency code of the target currency.
+
+        Returns:
+            float: The converted amount in the target currency.
+        """
+        if amount is None:
+            return None
+        # If currencies are missing or identical, return original amount
+        if not from_currency or not to_currency or from_currency == to_currency:
+            return amount
+        try:
+            # Use exchangerate.host to perform conversion
+            url = f"https://api.exchangerate.host/convert?from={from_currency}&to={to_currency}&amount={amount}"
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                result = data.get('result')
+                if result is not None:
+                    return float(result)
+        except Exception:
+            pass
+        # Fallback to original amount if anything goes wrong
+        return amount
+
+    def compute_profile_stats(user: dict) -> dict:
+        """
+        Compute summary statistics for the user's collection in their reference currency.
+
+        Args:
+            user (dict): Dictionary representing the logged-in user, containing at least 'ref_currency'.
+
+        Returns:
+            dict: A dictionary with total_spent, total_sold, roi, start_date, days_in_collection and currency keys.
+        """
+        ref = user.get('ref_currency') if user else None
+        # If no reference currency is set, return zeros without computing totals
+        if not ref:
+            return {
+                'total_spent': 0.0,
+                'total_sold': 0.0,
+                'roi': None,
+                'start_date': None,
+                'days_in_collection': None,
+                'currency': None
+            }
+        total_spent: float = 0.0
+        total_sold: float = 0.0
+        first_date = None
+        # Fetch all items once
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items")
+        items = cur.fetchall()
+        conn.close()
+        for item in items:
+            # Compute purchase amount in the reference currency on the fly.
+            purchase_val: float = 0.0
+            if item['purchase_price'] is not None:
+                try:
+                    amt = float(item['purchase_price'])
+                except Exception:
+                    amt = 0.0
+                if item['currency']:
+                    try:
+                        purchase_val = convert_currency(amt, item['currency'], ref)
+                    except Exception:
+                        purchase_val = amt
+                else:
+                    purchase_val = amt
+            total_spent += purchase_val
+            # Compute sale amount in the reference currency on the fly
+            if item['sale_price'] is not None:
+                try:
+                    s_amt = float(item['sale_price'])
+                except Exception:
+                    s_amt = 0.0
+                sale_val = s_amt
+                if item['currency']:
+                    try:
+                        sale_val = convert_currency(s_amt, item['currency'], ref)
+                    except Exception:
+                        sale_val = s_amt
+                total_sold += sale_val
+            # Determine earliest purchase date
+            if item['purchase_date']:
+                try:
+                    dt = datetime.strptime(item['purchase_date'], '%Y-%m-%d').date()
+                    if first_date is None or dt < first_date:
+                        first_date = dt
+                except Exception:
+                    pass
+        # Compute ROI
+        roi = None
+        if total_spent > 0:
+            roi = (total_sold - total_spent) / total_spent
+        start_date_str = None
+        days_in_collection = None
+        if first_date:
+            start_date_str = first_date.isoformat()
+            days_in_collection = (date.today() - first_date).days
+        return {
+            'total_spent': total_spent,
+            'total_sold': total_sold,
+            'roi': roi,
+            'start_date': start_date_str,
+            'days_in_collection': days_in_collection,
+            'currency': ref
+        }
 
     @app.route('/')
     def home():
@@ -217,6 +339,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'language': item['language'],
                 'category': item['category'],
                 'purchase_price': item['purchase_price'],
+                'purchase_price_curr_ref': item['purchase_price_curr_ref'],
                 'purchase_date': item['purchase_date'],
                 'sale_price': item['sale_price'],
                 'sale_date': item['sale_date'],
@@ -257,14 +380,35 @@ def create_app(db_path: str = "database.db") -> Flask:
         condition_field = data.get('condition')
         currency = data.get('currency')
         language = data.get('language')
+        # Determine purchase price in user's reference currency
+        # Determine purchase price in user's reference currency if provided, otherwise compute it
+        purchase_price_curr_ref = data.get('purchase_price_curr_ref')
+        try:
+            # Only compute if not provided explicitly and conversion parameters exist
+            if purchase_price_curr_ref is None:
+                # Fetch the user's reference currency
+                user_id = session.get('user_id')
+                user_ref = None
+                if user_id:
+                    conn = get_db_connection()
+                    ccur = conn.cursor()
+                    ccur.execute("SELECT ref_currency FROM users WHERE id = ?", (user_id,))
+                    row = ccur.fetchone()
+                    conn.close()
+                    user_ref = row['ref_currency'] if row else None
+                if purchase_price is not None and currency and user_ref:
+                    purchase_price_curr_ref = convert_currency(float(purchase_price), currency, user_ref)
+        except Exception:
+            # leave as None if conversion fails
+            purchase_price_curr_ref = None
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO items (name, description, category, purchase_price, purchase_date, sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+            INSERT INTO items (name, description, category, purchase_price, purchase_price_curr_ref, purchase_date, sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
             """,
-            (name, description, category, purchase_price, purchase_date, sale_price, sale_date, marketplace_link, tags, quantity, condition_field, currency, language)
+            (name, description, category, purchase_price, purchase_price_curr_ref, purchase_date, sale_price, sale_date, marketplace_link, tags, quantity, condition_field, currency, language)
         )
         conn.commit()
         item_id = cur.lastrowid
@@ -297,8 +441,30 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'quantity': int(form.get('quantity')) if form.get('quantity') else None,
                 'condition': form.get('condition'),
                 'currency': form.get('currency'),
-                'language': form.get('language')
+                'language': form.get('language'),
+                'purchase_price_curr_ref': float(form.get('purchase_price_curr_ref')) if form.get('purchase_price_curr_ref') else None
             }
+            # Compute purchase_price_curr_ref automatically if not provided but purchase_price and currency are present
+            try:
+                if mapping.get('purchase_price_curr_ref') is None and mapping.get('purchase_price') is not None:
+                    # fetch user's reference currency
+                    user_ref = None
+                    user_id_ses = session.get('user_id')
+                    if user_id_ses:
+                        conn_ref = get_db_connection()
+                        cur_ref = conn_ref.cursor()
+                        cur_ref.execute("SELECT ref_currency FROM users WHERE id = ?", (user_id_ses,))
+                        row_ref = cur_ref.fetchone()
+                        conn_ref.close()
+                        user_ref = row_ref['ref_currency'] if row_ref else None
+                    if user_ref and mapping.get('currency'):
+                        mapping['purchase_price_curr_ref'] = convert_currency(mapping['purchase_price'], mapping.get('currency'), user_ref)
+                    else:
+                        # leave as None when no conversion possible
+                        mapping['purchase_price_curr_ref'] = None
+            except Exception:
+                # If conversion fails, leave as None (do not fallback to purchase_price)
+                mapping['purchase_price_curr_ref'] = None
             for key, value in mapping.items():
                 if value is not None and value != '':
                     fields.append(f"{key} = ?")
@@ -327,10 +493,35 @@ def create_app(db_path: str = "database.db") -> Flask:
             data = request.get_json() or {}
             fields = []
             values = []
-            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language']:
+            # Build update list from provided fields
+            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language']:
                 if key in data and data[key] is not None:
                     fields.append(f"{key} = ?")
                     values.append(data[key])
+            # If purchase_price changes and no converted price provided, compute automatically
+            try:
+                if ('purchase_price_curr_ref' not in data or data.get('purchase_price_curr_ref') is None) and data.get('purchase_price') is not None:
+                    user_ref = None
+                    user_id_ses = session.get('user_id')
+                    if user_id_ses:
+                        conn_ref = get_db_connection()
+                        c_ref = conn_ref.cursor()
+                        c_ref.execute("SELECT ref_currency FROM users WHERE id = ?", (user_id_ses,))
+                        row_ref = c_ref.fetchone()
+                        conn_ref.close()
+                        user_ref = row_ref['ref_currency'] if row_ref else None
+                    if user_ref and data.get('currency'):
+                        conv_val = convert_currency(float(data['purchase_price']), data.get('currency'), user_ref)
+                        fields.append("purchase_price_curr_ref = ?")
+                        values.append(conv_val)
+                    else:
+                        # set to NULL when no conversion possible
+                        fields.append("purchase_price_curr_ref = ?")
+                        values.append(None)
+            except Exception:
+                # on error, set to NULL rather than copying purchase_price
+                fields.append("purchase_price_curr_ref = ?")
+                values.append(None)
             if not fields:
                 return jsonify({'error': 'No fields to update'}), 400
             values.append(item_id)
@@ -354,6 +545,64 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.close()
         return jsonify({'message': 'Item deleted'})
 
+    @app.route('/api/convert')
+    @require_login
+    def api_convert():
+        """
+        Convert a monetary amount from one currency to another. Requires query parameters:
+        - amount: numeric amount to convert
+        - from: source currency code (e.g., EUR)
+        - to: target currency code (e.g., USD)
+        Returns JSON with {'result': converted_amount} on success.
+        """
+        amount = request.args.get('amount', type=float)
+        from_cur = request.args.get('from', type=str)
+        to_cur = request.args.get('to', type=str)
+        if amount is None or not from_cur or not to_cur:
+            return jsonify({'error': 'Missing parameters'}), 400
+        try:
+            result = convert_currency(amount, from_cur, to_cur)
+            return jsonify({'result': result})
+        except Exception:
+            return jsonify({'error': 'Conversion failed'}), 500
+
+    @app.route('/api/user')
+    @require_login
+    def api_user():
+        """
+        Return basic information about the currently logged-in user, including
+        reference currency. Useful for front-end logic.
+        """
+        user_id = session.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'Unauthorized'}), 401
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, nickname, ref_currency FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        conn.close()
+        if user:
+            # Return user info as dict
+            return jsonify({k: user[k] for k in user.keys()})
+        return jsonify({'error': 'User not found'}), 404
+
+    @app.route('/api/profile/stats', methods=['GET'])
+    @require_login
+    def api_profile_stats():
+        """
+        Endpoint to compute and return the current logged-in user's collection statistics
+        in JSON format. Used by the front-end to refresh stats manually.
+        """
+        user_id = session.get('user_id')
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        conn.close()
+        user_dict = dict(user) if user else {}
+        stats = compute_profile_stats(user_dict)
+        return jsonify(stats)
+
     @app.route('/api/export/csv', methods=['GET'])
     @require_login
     def export_csv():
@@ -375,7 +624,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         writer = csv.writer(output)
         # Write header
         writer.writerow([
-            'ID', 'Name', 'Description', 'Language', 'Category', 'Purchase Price', 'Currency', 'Purchase Date', 'Sale Price', 'Sale Date', 'Marketplace Link',
+            'ID', 'Name', 'Description', 'Language', 'Category', 'Purchase Price', 'Purchase Price (Ref)', 'Currency', 'Purchase Date', 'Sale Price', 'Sale Date', 'Marketplace Link',
             'Tags', 'Image Path', 'Quantity', 'Condition', 'Time in Collection (days)', 'ROI'
         ])
         for item in items:
@@ -405,7 +654,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                     roi = ''
             writer.writerow([
                 item['id'], item['name'], item['description'], item['language'], item['category'],
-                item['purchase_price'], item['currency'], item['purchase_date'], item['sale_price'], item['sale_date'],
+                item['purchase_price'], item['purchase_price_curr_ref'], item['currency'], item['purchase_date'], item['sale_price'], item['sale_date'],
                 item['marketplace_link'], item['tags'], item['image_path'], item['quantity'], item['condition'],
                 time_in_collection, roi
             ])
@@ -439,6 +688,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             form = request.form
             files = request.files
             nickname = form.get('nickname')
+            ref_currency = form.get('ref_currency')
             vinted_link = form.get('vinted_link')
             cardmarket_link = form.get('cardmarket_link')
             ebay_link = form.get('ebay_link')
@@ -449,6 +699,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             if nickname is not None:
                 fields.append('nickname = ?')
                 values.append(nickname)
+            if ref_currency is not None:
+                fields.append('ref_currency = ?')
+                values.append(ref_currency)
             if vinted_link is not None:
                 fields.append('vinted_link = ?')
                 values.append(vinted_link)
@@ -465,11 +718,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             if profile_image and profile_image.filename:
                 ext = os.path.splitext(profile_image.filename)[1].lower()
                 if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']:
-                    # unique_name = f"profile_{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}{ext}"
                     unique_name = profile_image.filename
                     save_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
                     profile_image.save(save_path)
-                    #image_rel_path = os.path.relpath(save_path, os.path.join(os.path.dirname(__file__), 'static'))
                     image_rel_path = f"uploads/{unique_name}"
                     fields.append('profile_image_path = ?')
                     values.append(image_rel_path)
@@ -481,13 +732,18 @@ def create_app(db_path: str = "database.db") -> Flask:
             cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
             user = cur.fetchone()
             conn.close()
-            return render_template('profile.html', user=user, updated=True)
+            user_dict = dict(user) if user else {}
+            # Compute statistics for display
+            stats = compute_profile_stats(user_dict)
+            return render_template('profile.html', user=user_dict, updated=True, stats=stats)
         else:
+            # GET request: fetch user and compute stats
             cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
             user = cur.fetchone()
             conn.close()
             user_dict = dict(user) if user else {}
-            return render_template('profile.html', user=user_dict)
+            stats = compute_profile_stats(user_dict)
+            return render_template('profile.html', user=user_dict, stats=stats)
 
     return app
 

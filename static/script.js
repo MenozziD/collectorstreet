@@ -1,4 +1,6 @@
 // script.js - gestisce login e interazione con l'applicazione
+// Global variable to store the current user's reference currency
+let USER_REF_CURRENCY = null;
 
 // Mappatura categorie -> icone. Le chiavi sono in minuscolo.
 const categoryIcons = {
@@ -56,7 +58,25 @@ document.addEventListener('DOMContentLoaded', () => {
         // Siamo nella pagina principale della app
         initApp();
     }
+    // Se siamo nella pagina profilo, attacca evento per aggiornare le statistiche
+    const updateStatsBtn = document.getElementById('updateStatsBtn');
+    if (updateStatsBtn) {
+        updateStatsBtn.addEventListener('click', updateProfileStats);
+    }
 });
+
+// Fetch the logged in user's information, including reference currency
+async function fetchUserInfo() {
+    try {
+        const res = await fetch('/api/user');
+        if (res.ok) {
+            const data = await res.json();
+            USER_REF_CURRENCY = data.ref_currency || null;
+        }
+    } catch (err) {
+        console.error('Errore recupero utente:', err);
+    }
+}
 
 function initApp() {
     // Elementi principali del DOM
@@ -71,6 +91,9 @@ function initApp() {
     const modalClose = document.getElementById('modalClose');
     const modalTitle = document.getElementById('modalTitle');
     const itemForm = document.getElementById('itemForm');
+
+    // Recupera informazioni utente (valuta di riferimento) all'avvio
+    fetchUserInfo();
 
     // Recupera e visualizza gli item all'avvio
     fetchItems();
@@ -147,6 +170,9 @@ function initApp() {
                 formData.append('quantity', quantity);
                 formData.append('condition', conditionVal);
                 formData.append('currency', currency);
+                // Prezzo in valuta di riferimento può essere opzionale; aggiungilo comunque
+                const refVal = document.getElementById('purchasePriceRef').value;
+                formData.append('purchase_price_curr_ref', refVal);
                 if (imageInput.files && imageInput.files[0]) {
                     formData.append('image', imageInput.files[0]);
                 }
@@ -171,6 +197,9 @@ function initApp() {
                     condition: conditionVal || null,
                     currency
                 };
+                // Include prezzo in valuta di riferimento se presente
+                const refValJson = document.getElementById('purchasePriceRef').value;
+                payload.purchase_price_curr_ref = refValJson ? parseFloat(refValJson) : null;
                 res = await fetch('/api/items', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -191,6 +220,71 @@ function initApp() {
             alert('Impossibile connettersi al server');
         }
     });
+
+    // Aggiungi listener per ricalcolo automatico del prezzo in valuta di riferimento
+    const purchasePriceInput = document.getElementById('purchasePrice');
+    const currencySelectInput = document.getElementById('currency');
+    purchasePriceInput.addEventListener('input', autoCalculateRefPrice);
+    currencySelectInput.addEventListener('change', autoCalculateRefPrice);
+}
+
+// Calcola automaticamente il prezzo di acquisto nella valuta di riferimento dell'utente
+async function autoCalculateRefPrice() {
+    const refCur = USER_REF_CURRENCY;
+    const priceField = document.getElementById('purchasePrice');
+    const currField = document.getElementById('currency');
+    const refField = document.getElementById('purchasePriceRef');
+    if (!refField) return;
+    const amount = parseFloat(priceField.value);
+    const fromCur = currField.value;
+    if (!refCur || !amount || isNaN(amount) || !fromCur) {
+        // Nessun calcolo possibile
+        refField.value = '';
+        return;
+    }
+    try {
+        const params = new URLSearchParams({ amount: amount, from: fromCur, to: refCur });
+        const res = await fetch(`/api/convert?${params.toString()}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data && typeof data.result === 'number') {
+                refField.value = data.result.toFixed(2);
+                return;
+            }
+        }
+    } catch (err) {
+        console.error('Errore conversione valuta:', err);
+    }
+    // In caso di errore lascia vuoto
+    refField.value = '';
+}
+
+// Aggiorna le statistiche del profilo manualmente
+async function updateProfileStats() {
+    try {
+        const res = await fetch('/api/profile/stats');
+        if (!res.ok) return;
+        const stats = await res.json();
+        // Aggiorna gli elementi nel DOM
+        const totalSpentEl = document.getElementById('statTotalSpent');
+        const totalSoldEl = document.getElementById('statTotalSold');
+        const roiEl = document.getElementById('statROI');
+        const startDateEl = document.getElementById('statStartDate');
+        const daysEl = document.getElementById('statDays');
+        if (stats.currency) {
+            totalSpentEl.textContent = stats.total_spent.toFixed(2);
+            totalSoldEl.textContent = stats.total_sold.toFixed(2);
+            roiEl.textContent = (stats.roi !== null && stats.roi !== undefined) ? (stats.roi * 100).toFixed(2) : '-';
+        } else {
+            totalSpentEl.textContent = '-';
+            totalSoldEl.textContent = '-';
+            roiEl.textContent = '-';
+        }
+        startDateEl.textContent = stats.start_date || '-';
+        daysEl.textContent = (stats.days_in_collection !== null && stats.days_in_collection !== undefined) ? stats.days_in_collection : '-';
+    } catch (err) {
+        console.error('Errore aggiornamento statistiche:', err);
+    }
 }
 
 async function fetchItems() {
@@ -297,6 +391,12 @@ function renderItems(items) {
             const currency = item.currency || '';
             pp.innerHTML = `<strong>Prezzo Acquisto:</strong> ${item.purchase_price} ${currency}`;
             card.appendChild(pp);
+            // Mostra anche il prezzo in valuta di riferimento se disponibile e se l'utente ha impostato una valuta di riferimento
+            if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined && USER_REF_CURRENCY) {
+                const ppRef = document.createElement('p');
+                ppRef.innerHTML = `<strong>Prezzo Acquisto (Ref):</strong> ${item.purchase_price_curr_ref.toFixed(2)} ${USER_REF_CURRENCY}`;
+                card.appendChild(ppRef);
+            }
         }
         if (item.purchase_date) {
             const pd = document.createElement('p');
@@ -433,6 +533,7 @@ function openModal(item = null) {
     const condition = document.getElementById('condition');
     const imageInput = document.getElementById('image');
     const currencySelect = document.getElementById('currency');
+    const purchasePriceRef = document.getElementById('purchasePriceRef');
     if (item) {
         modalTitle.textContent = 'Modifica Item';
         itemId.value = item.id;
@@ -451,9 +552,15 @@ function openModal(item = null) {
         // Note: non si può impostare il valore dell'input file per motivi di sicurezza
         imageInput.value = '';
         currencySelect.value = item.currency || '';
+        // Set purchase price in reference currency if available
+        if (purchasePriceRef) {
+            purchasePriceRef.value = (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined) ? item.purchase_price_curr_ref : '';
+        }
     } else {
         modalTitle.textContent = 'Nuovo Item';
         clearItemForm();
+        // Reset reference price field
+        if (purchasePriceRef) purchasePriceRef.value = '';
     }
     modal.classList.remove('hidden');
 }
@@ -479,4 +586,6 @@ function clearItemForm() {
     document.getElementById('condition').value = '';
     document.getElementById('image').value = '';
     document.getElementById('currency').value = '';
+    const refInput = document.getElementById('purchasePriceRef');
+    if (refInput) refInput.value = '';
 }

@@ -469,6 +469,37 @@ nav .actions button:hover {
     background-color: #007174;
 }
 
+/* Layout per la sezione profilo: dividi modifiche e statistiche in due colonne */
+.profile-columns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.profile-edit {
+    flex: 0 0 40%;
+    max-width: 40%;
+}
+
+.profile-stats {
+    flex: 1;
+    max-width: 60%;
+}
+
+/* Pulsante per aggiornare le statistiche */
+.update-stats-btn {
+    margin-bottom: 10px;
+    padding: 6px 12px;
+    background-color: #008489;
+    border: none;
+    color: #ffffff;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.update-stats-btn:hover {
+    background-color: #007174;
+}
+
 .success-msg {
     color: #3c763d;
     background-color: #dff0d8;
