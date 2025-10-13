@@ -36,13 +36,23 @@
         <!-- Feed di news e attività -->
         <div class="feed-container">
             <!-- Due card di news con placeholder. In futuro saranno rimpiazzate da feed RSS personalizzati -->
-            <div class="feed-card news-card">
+            <!-- Card di news: verranno aggiornate dinamicamente da JS -->
+            <div class="feed-card news-card" id="newsCard1">
                 <h4>Novità</h4>
-                <p>In arrivo nuove funzionalità su Collector Street. Resta sintonizzato!</p>
+                <p>Caricamento notizie...</p>
             </div>
-            <div class="feed-card news-card">
+            <div class="feed-card news-card" id="newsCard2">
                 <h4>Novità</h4>
-                <p>Nuovi giochi retro aggiunti al nostro blog! Dai un'occhiata alla sezione Notizie.</p>
+                <p>Caricamento notizie...</p>
+            </div>
+            <!-- Card informative: numero oggetti e periodo collezione -->
+            <div class="feed-card info-card" id="infoItemsCard">
+                <h4>Numero oggetti</h4>
+                <p>-</p>
+            </div>
+            <div class="feed-card info-card" id="infoPeriodCard">
+                <h4>Giorni in collezione</h4>
+                <p>-</p>
             </div>
             <!-- Due card di attività personali. Verranno riempite via JS -->
             <div class="feed-card personal-card">

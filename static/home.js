@@ -21,7 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {Object} stats Oggetto con totale speso, venduto, roi e valuta
      */
     function updateStatsCard(stats) {
-        const totalSpent = stats.total_spent || 0;
+        // Usa la spesa complessiva per confrontare con il totale venduto.
+        const totalSpent = stats.total_spent_all || 0;
         const totalSold = stats.total_sold || 0;
         const maxVal = Math.max(totalSpent, totalSold, 1);
         const spentBar = document.querySelector('.bar.spent');
@@ -38,10 +39,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const spentValEl = document.getElementById('totalSpentVal');
         const soldValEl = document.getElementById('totalSoldVal');
         if (spentValEl) {
-            spentValEl.textContent = stats.currency ? `${totalSpent.toFixed(2)} ${stats.currency}` : '-';
+            spentValEl.textContent = stats.currency ? `${(stats.total_spent_all || 0).toFixed(2)} ${stats.currency}` : '-';
         }
         if (soldValEl) {
-            soldValEl.textContent = stats.currency ? `${totalSold.toFixed(2)} ${stats.currency}` : '-';
+            soldValEl.textContent = stats.currency ? `${(stats.total_sold || 0).toFixed(2)} ${stats.currency}` : '-';
         }
         // Aggiorna ROI
         const roiSpan = document.getElementById('roiPercentage');
@@ -54,6 +55,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 roiSpan.textContent = '-';
                 roiSpan.style.color = '';
             }
+        }
+
+        // Aggiorna card informative: numero oggetti e giorni di collezione
+        const infoItemsCard = document.getElementById('infoItemsCard');
+        if (infoItemsCard) {
+            const p = infoItemsCard.querySelector('p');
+            p.textContent = stats.item_count !== null && stats.item_count !== undefined ? stats.item_count : '-';
+        }
+        const infoPeriodCard = document.getElementById('infoPeriodCard');
+        if (infoPeriodCard) {
+            const p = infoPeriodCard.querySelector('p');
+            p.textContent = stats.days_in_collection !== null && stats.days_in_collection !== undefined ? stats.days_in_collection : '-';
         }
     }
 
@@ -122,6 +135,75 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /**
+     * Recupera notizie da Google News RSS in base ai tag degli oggetti nella collezione.
+     * Usa il servizio allorigins per bypassare CORS. In caso di errore mostra un messaggio di fallback.
+     */
+    async function fetchNews() {
+        try {
+            // Ottieni tutti gli item per determinare i tag unici
+            const resItems = await fetch('/api/items');
+            if (!resItems.ok) throw new Error('Impossibile recuperare gli oggetti');
+            const items = await resItems.json();
+            const tagSet = new Set();
+            items.forEach(item => {
+                if (item.tags) {
+                    item.tags.split(',').forEach(t => {
+                        const tag = t.trim();
+                        if (tag) tagSet.add(tag);
+                    });
+                }
+                // Considera anche la categoria come tag per la ricerca
+                if (item.category) {
+                    tagSet.add(item.category.trim());
+                }
+            });
+            let query = Array.from(tagSet).join(' OR ');
+            if (!query) {
+                // Tag predefinito se non ci sono oggetti o tag
+                query = 'collezionismo';
+            }
+            const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=it&gl=IT&ceid=IT:it`;
+            // Usa allorigins per superare le limitazioni CORS
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error('Impossibile recuperare le notizie');
+            const data = await res.json();
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(data.contents, 'application/xml');
+            const itemsNodes = xml.querySelectorAll('item');
+            const newsCards = [document.getElementById('newsCard1'), document.getElementById('newsCard2')];
+            newsCards.forEach((card, idx) => {
+                const titleEl = card.querySelector('h4');
+                const pEl = card.querySelector('p');
+                const itemNode = itemsNodes[idx];
+                if (itemNode && titleEl && pEl) {
+                    const title = itemNode.querySelector('title')?.textContent || 'Notizia';
+                    const link = itemNode.querySelector('link')?.textContent || '#';
+                    const pubDate = itemNode.querySelector('pubDate')?.textContent || '';
+                    titleEl.textContent = title;
+                    // Mostra link e data
+                    pEl.innerHTML = `<a href="${link}" target="_blank">Apri articolo</a><br><small>${pubDate}</small>`;
+                } else if (titleEl && pEl) {
+                    titleEl.textContent = 'Novità';
+                    pEl.textContent = 'Nessuna notizia disponibile.';
+                }
+            });
+        } catch (err) {
+            console.error('Errore nel recupero delle notizie', err);
+            // fallback: mostra messaggio di errore
+            const newsCards = [document.getElementById('newsCard1'), document.getElementById('newsCard2')];
+            newsCards.forEach((card) => {
+                const titleEl = card.querySelector('h4');
+                const pEl = card.querySelector('p');
+                if (titleEl && pEl) {
+                    titleEl.textContent = 'Novità';
+                    pEl.textContent = 'Impossibile recuperare le notizie.';
+                }
+            });
+        }
+    }
+
     // Associa il click del bottone di aggiornamento statistiche alla funzione fetchStats
     const updateBtn = document.getElementById('updateStatsBtn');
     if (updateBtn) {
@@ -132,4 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchStats();
     fetchPersonalActivity();
     fetchGlobalActivity();
+
+    // Recupera notizie rilevanti in base ai tag degli oggetti della collezione
+    fetchNews();
 });

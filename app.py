@@ -192,8 +192,11 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'days_in_collection': None,
                 'currency': None
             }
-        total_spent: float = 0.0
-        total_sold: float = 0.0
+        # Somme per le statistiche
+        total_spent_all: float = 0.0  # somma speso su tutti gli oggetti
+        total_spent_sold: float = 0.0  # somma speso solo per gli oggetti venduti
+        total_sold: float = 0.0        # somma venduto (incasso)
+        item_count: int = 0
         first_date = None
         # Fetch only the items belonging to this user
         conn = get_db_connection()
@@ -205,8 +208,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             cur.execute("SELECT * FROM items WHERE 1=0")  # no items for anonymous user
         items = cur.fetchall()
         conn.close()
+        item_count = len(items)
         for item in items:
-            # Compute purchase amount in the reference currency on the fly.
+            # Calcola l'importo di acquisto convertito nella valuta di riferimento
             purchase_val: float = 0.0
             if item['purchase_price'] is not None:
                 try:
@@ -220,9 +224,12 @@ def create_app(db_path: str = "database.db") -> Flask:
                         purchase_val = amt
                 else:
                     purchase_val = amt
-            total_spent += purchase_val
-            # Compute sale amount in the reference currency on the fly
+                total_spent_all += purchase_val
+            # Se l'oggetto è stato venduto, aggiungi il costo all'ammontare speso per ROI
             if item['sale_price'] is not None:
+                if item['purchase_price'] is not None:
+                    total_spent_sold += purchase_val
+                # Calcola l'importo di vendita convertito
                 try:
                     s_amt = float(item['sale_price'])
                 except Exception:
@@ -234,7 +241,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                     except Exception:
                         sale_val = s_amt
                 total_sold += sale_val
-            # Determine earliest purchase date
+            # Determina la data di acquisto più antica per calcolare la durata della collezione
             if item['purchase_date']:
                 try:
                     dt = datetime.strptime(item['purchase_date'], '%Y-%m-%d').date()
@@ -242,21 +249,23 @@ def create_app(db_path: str = "database.db") -> Flask:
                         first_date = dt
                 except Exception:
                     pass
-        # Compute ROI
+        # ROI calcolato solo sugli oggetti venduti
         roi = None
-        if total_spent > 0:
-            roi = (total_sold - total_spent) / total_spent
+        if total_spent_sold > 0:
+            roi = (total_sold - total_spent_sold) / total_spent_sold
         start_date_str = None
         days_in_collection = None
         if first_date:
             start_date_str = first_date.isoformat()
             days_in_collection = (date.today() - first_date).days
         return {
-            'total_spent': total_spent,
+            'total_spent': total_spent_sold,      # speso sui venduti
+            'total_spent_all': total_spent_all,  # speso complessivo (tutti gli oggetti)
             'total_sold': total_sold,
             'roi': roi,
             'start_date': start_date_str,
             'days_in_collection': days_in_collection,
+            'item_count': item_count,
             'currency': ref
         }
 
