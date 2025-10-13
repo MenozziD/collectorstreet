@@ -88,6 +88,10 @@ def create_app(db_path: str = "database.db") -> Flask:
                 condition TEXT,
                 currency TEXT,
                 language TEXT,
+                fair_value REAL,
+                price_p05 REAL,
+                price_p95 REAL,
+                valuation_date TEXT,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )
             """
@@ -102,6 +106,10 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('currency', 'TEXT'),
             ('language', 'TEXT'),
             ('purchase_price_curr_ref', 'REAL')
+            ,('fair_value', 'REAL'),
+            ('price_p05', 'REAL'),
+            ('price_p95', 'REAL'),
+            ('valuation_date', 'TEXT')
         ]:
             try:
                 cur.execute(f"ALTER TABLE items ADD COLUMN {column} {col_type}")
@@ -170,6 +178,46 @@ def create_app(db_path: str = "database.db") -> Flask:
                 return amount
         # If unknown currency, return original amount
         return amount
+
+    def estimate_valuation(item: sqlite3.Row) -> dict:
+        """
+        Estimate a fair market value and price range for an item using a simple heuristic.
+        For this MVP, the function uses the purchase price or sale price as a base and applies
+        multipliers to derive a range. If both prices are missing or zero, returns None values.
+
+        Args:
+            item (sqlite3.Row): The database row representing the item.
+
+        Returns:
+            dict: A dictionary with keys fair_value, price_p05, price_p95 and valuation_date.
+        """
+        base_price = None
+        # Prefer sale_price if available for a more recent market indicator
+        try:
+            if item['sale_price'] is not None and float(item['sale_price']) > 0:
+                base_price = float(item['sale_price'])
+            elif item['purchase_price'] is not None and float(item['purchase_price']) > 0:
+                base_price = float(item['purchase_price'])
+        except Exception:
+            base_price = None
+        if not base_price:
+            return {
+                'fair_value': None,
+                'price_p05': None,
+                'price_p95': None,
+                'valuation_date': None
+            }
+        # Apply simple multipliers to compute median and range
+        fair_value = base_price * 1.2  # assume 20% appreciation
+        price_p05 = base_price * 0.8  # -20% low estimate
+        price_p95 = base_price * 1.4  # +40% high estimate
+        val_date = date.today().isoformat()
+        return {
+            'fair_value': fair_value,
+            'price_p05': price_p05,
+            'price_p95': price_p95,
+            'valuation_date': val_date
+        }
 
     def compute_profile_stats(user: dict) -> dict:
         """
@@ -376,6 +424,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                     roi = (item['sale_price'] - item['purchase_price']) / item['purchase_price']
                 except Exception:
                     roi = None
+            # Estimate valuation for this item
+            valuation = estimate_valuation(item)
             result.append({
                 'id': item['id'],
                 'name': item['name'],
@@ -394,7 +444,11 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'condition': item['condition'],
                 'currency': item['currency'],
                 'time_in_collection': time_in_collection,
-                'roi': roi
+                'roi': roi,
+                'fair_value': valuation.get('fair_value'),
+                'price_p05': valuation.get('price_p05'),
+                'price_p95': valuation.get('price_p95'),
+                'valuation_date': valuation.get('valuation_date')
             })
         return jsonify(result)
 
@@ -687,6 +741,34 @@ def create_app(db_path: str = "database.db") -> Flask:
         user_dict = dict(user) if user else {}
         stats = compute_profile_stats(user_dict)
         return jsonify(stats)
+
+    @app.route('/api/items/<int:item_id>/valuation', methods=['GET'])
+    @require_login
+    def get_item_valuation(item_id: int):
+        """
+        Compute and return the estimated valuation for a specific item. The item must belong
+        to the logged-in user. Returns 404 if the item is not found.
+
+        Args:
+            item_id (int): ID of the item to valuate.
+
+        Returns:
+            JSON: A dictionary with fair_value, price_p05, price_p95, valuation_date and currency.
+        """
+        user_id = session.get('user_id')
+        if user_id is None:
+            return jsonify({'error': 'Unauthorized'}), 401
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ? AND user_id = ?", (item_id, user_id))
+        item = cur.fetchone()
+        conn.close()
+        if not item:
+            return jsonify({'error': 'Item not found'}), 404
+        valuation = estimate_valuation(item)
+        # Include the item's currency for clarity
+        valuation['currency'] = item['currency']
+        return jsonify(valuation)
 
     @app.route('/register', methods=['GET', 'POST'])
     def register():
