@@ -198,8 +198,8 @@ function initApp() {
                     currency
                 };
                 // Include prezzo in valuta di riferimento se presente
-                // const refValJson = document.getElementById('purchasePriceRef').value;
-                // payload.purchase_price_curr_ref = refValJson ? parseFloat(refValJson) : null;
+                const refValJson = document.getElementById('purchasePriceRef').value;
+                payload.purchase_price_curr_ref = refValJson ? parseFloat(refValJson) : null;
                 res = await fetch('/api/items', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

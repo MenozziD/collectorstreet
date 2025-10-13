@@ -10,7 +10,10 @@
     <nav>
         <h1>Collector Street</h1>
         <div class="actions">
+            <!-- Primary navigation links -->
+            <a href="/home" class="nav-btn">Home</a>
             <a href="/" class="nav-btn">Collezione</a>
+            <a href="/profile" class="nav-btn">Profilo</a>
             <button id="logoutBtn">Logout</button>
         </div>
     </nav>
@@ -108,12 +111,159 @@
             </div>
         </div>
     </section>
+    {% if is_admin %}
+    <hr>
+    <section class="admin-users">
+        <h3>Gestione utenti</h3>
+        <table id="usersTable" class="users-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Nickname</th>
+                    <th>Valuta rif.</th>
+                    <th>Azioni</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+        </table>
+        <h4>Aggiungi/Modifica utente</h4>
+        <form id="userForm" class="user-form">
+            <input type="hidden" id="editUserId">
+            <input type="text" id="newUsername" placeholder="Username" required>
+            <input type="password" id="newPassword" placeholder="Password">
+            <input type="text" id="newNickname" placeholder="Nickname">
+            <select id="newRefCurrency">
+                <option value="">Seleziona valuta</option>
+                <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
+                <option value="JPY">JPY</option>
+                <option value="GBP">GBP</option>
+                <option value="CNY">CNY</option>
+            </select>
+            <button type="submit">Salva</button>
+            <button type="button" id="cancelEditBtn">Annulla</button>
+        </form>
+    </section>
+    {% endif %}
     <script>
         // Logout button handler
         document.getElementById('logoutBtn').addEventListener('click', async () => {
             await fetch('/logout', { method: 'POST' });
             window.location.href = '/';
         });
+
+        // Admin user management. Only initialize if the current user is admin.
+        const isAdmin = {{ 'true' if is_admin else 'false' }};
+        if (isAdmin) {
+            async function loadUsers() {
+                try {
+                    const res = await fetch('/api/admin/users');
+                    if (res.ok) {
+                        const users = await res.json();
+                        const tbody = document.getElementById('usersTableBody');
+                        tbody.innerHTML = '';
+                        users.forEach(user => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${user.id}</td>
+                                <td>${user.username}</td>
+                                <td>${user.nickname || ''}</td>
+                                <td>${user.ref_currency || ''}</td>
+                                <td>
+                                    <button class="edit-user" data-id="${user.id}">Modifica</button>
+                                    <button class="delete-user" data-id="${user.id}">Elimina</button>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                        // Attach handlers
+                        document.querySelectorAll('.edit-user').forEach(btn => {
+                            btn.addEventListener('click', () => {
+                                const id = btn.dataset.id;
+                                const row = btn.closest('tr');
+                                const username = row.children[1].textContent;
+                                const nickname = row.children[2].textContent;
+                                const refCur = row.children[3].textContent;
+                                document.getElementById('editUserId').value = id;
+                                document.getElementById('newUsername').value = username;
+                                document.getElementById('newPassword').value = '';
+                                document.getElementById('newNickname').value = nickname;
+                                document.getElementById('newRefCurrency').value = refCur;
+                            });
+                        });
+                        document.querySelectorAll('.delete-user').forEach(btn => {
+                            btn.addEventListener('click', async () => {
+                                const id = btn.dataset.id;
+                                if (confirm('Sei sicuro di voler eliminare questo utente?')) {
+                                    const resDel = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+                                    if (resDel.ok) {
+                                        loadUsers();
+                                    } else {
+                                        const d = await resDel.json();
+                                        alert(d.error || 'Errore durante la cancellazione');
+                                    }
+                                }
+                            });
+                        });
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+            }
+            // Submit handler for user form
+            document.getElementById('userForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const id = document.getElementById('editUserId').value;
+                const username = document.getElementById('newUsername').value.trim();
+                const password = document.getElementById('newPassword').value.trim();
+                const nickname = document.getElementById('newNickname').value.trim();
+                const refCurrency = document.getElementById('newRefCurrency').value || null;
+                if (!username) {
+                    alert('Username obbligatorio');
+                    return;
+                }
+                const payload = { username, nickname, ref_currency: refCurrency };
+                // Include password only when set (for new user or if provided in edit)
+                if (password) payload.password = password;
+                let res;
+                if (id) {
+                    // Update existing user
+                    res = await fetch(`/api/admin/users/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    // Create new user (password is required for new user)
+                    if (!password) {
+                        alert('Password obbligatoria per la creazione di un nuovo utente');
+                        return;
+                    }
+                    res = await fetch('/api/admin/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password, nickname, ref_currency: refCurrency })
+                    });
+                }
+                if (res.ok) {
+                    // Clear form and reload list
+                    document.getElementById('editUserId').value = '';
+                    document.getElementById('userForm').reset();
+                    loadUsers();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Errore nel salvataggio utente');
+                }
+            });
+            // Cancel edit button
+            document.getElementById('cancelEditBtn').addEventListener('click', () => {
+                document.getElementById('editUserId').value = '';
+                document.getElementById('userForm').reset();
+            });
+            // Load users on initial page load
+            loadUsers();
+        }
     </script>
 </body>
 </html>

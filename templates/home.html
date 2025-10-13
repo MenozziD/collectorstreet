@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collector Street - Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <nav>
+        <h1>Collector Street</h1>
+        <div class="actions">
+            <!-- Navigation links -->
+            <a href="/home" class="nav-btn">Home</a>
+            <a href="/" class="nav-btn">Collezione</a>
+            <a href="/profile" class="nav-btn">Profilo</a>
+            <button id="logoutBtn">Logout</button>
+        </div>
+    </nav>
+    <section class="home-container">
+        <h2>Benvenuto, {{ user.nickname or user.username }}</h2>
+        <!-- Card statistiche con grafici e indicatori -->
+        <div class="stats-card">
+            <h3>Statistiche collezione</h3>
+            <div class="bar-chart">
+                <div class="bar spent" style="width:0%"></div>
+                <div class="bar sold" style="width:0%"></div>
+            </div>
+            <div class="stats-numbers">
+                <span><strong>Speso:</strong> <span id="totalSpentVal">-</span></span>
+                <span><strong>Venduto:</strong> <span id="totalSoldVal">-</span></span>
+            </div>
+            <div class="roi-indicator"><strong>ROI:</strong> <span id="roiPercentage">-</span></div>
+            <button type="button" id="updateStatsBtn" class="update-stats-btn">Aggiorna statistiche</button>
+        </div>
+        <!-- Feed di news e attività -->
+        <div class="feed-container">
+            <!-- Due card di news con placeholder. In futuro saranno rimpiazzate da feed RSS personalizzati -->
+            <div class="feed-card news-card">
+                <h4>Novità</h4>
+                <p>In arrivo nuove funzionalità su Collector Street. Resta sintonizzato!</p>
+            </div>
+            <div class="feed-card news-card">
+                <h4>Novità</h4>
+                <p>Nuovi giochi retro aggiunti al nostro blog! Dai un'occhiata alla sezione Notizie.</p>
+            </div>
+            <!-- Due card di attività personali. Verranno riempite via JS -->
+            <div class="feed-card personal-card">
+                <h4>Attività recente</h4>
+                <p>Caricamento...</p>
+            </div>
+            <div class="feed-card personal-card">
+                <h4>Attività recente</h4>
+                <p>Caricamento...</p>
+            </div>
+            <!-- Card attività globale visibile solo per admin -->
+            {% if user.username == 'admin' %}
+            <div class="feed-card" id="globalCard">
+                <h4>Attività applicazione</h4>
+                <p>Nessuna nuova attività.</p>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+    <!-- Script per gestione logout e dashboard -->
+    <script>
+        // Handler del bottone di logout: chiama l'endpoint e poi reindirizza alla login
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            await fetch('/logout', { method: 'POST' });
+            window.location.href = '/';
+        });
+    </script>
+    <!-- Script dedicato alla pagina Home -->
+    <script src="{{ url_for('static', filename='home.js') }}"></script>
+</body>
+</html>
