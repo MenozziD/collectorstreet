@@ -18,76 +18,59 @@
         </div>
     </nav>
     <section class="home-container">
-        <h2>Benvenuto</h2>
-        <!-- Summary statistics panel -->
-        <div class="home-stats">
+        <h2>Benvenuto, {{ user.nickname or user.username }}</h2>
+        <!-- Card statistiche con grafici e indicatori -->
+        <div class="stats-card">
             <h3>Statistiche collezione</h3>
+            <div class="bar-chart">
+                <div class="bar spent" style="width:0%"></div>
+                <div class="bar sold" style="width:0%"></div>
+            </div>
+            <div class="stats-numbers">
+                <span><strong>Speso:</strong> <span id="totalSpentVal">-</span></span>
+                <span><strong>Venduto:</strong> <span id="totalSoldVal">-</span></span>
+            </div>
+            <div class="roi-indicator"><strong>ROI:</strong> <span id="roiPercentage">-</span></div>
             <button type="button" id="updateStatsBtn" class="update-stats-btn">Aggiorna statistiche</button>
-            <ul class="stats-list" id="statsList">
-                <li><strong>Totale speso:</strong>
-                    {% if stats.currency %}
-                        <span id="statTotalSpent">{{ stats.total_spent | round(2) }}</span> {{ stats.currency }}
-                    {% else %}
-                        <span id="statTotalSpent">-</span>
-                    {% endif %}
-                </li>
-                <li><strong>Totale venduto:</strong>
-                    {% if stats.currency %}
-                        <span id="statTotalSold">{{ stats.total_sold | round(2) }}</span> {{ stats.currency }}
-                    {% else %}
-                        <span id="statTotalSold">-</span>
-                    {% endif %}
-                </li>
-                <li><strong>ROI:</strong>
-                    {% if stats.currency and stats.roi is not none %}
-                        <span id="statROI">{{ (stats.roi * 100) | round(2) }}</span>%
-                    {% else %}
-                        <span id="statROI">-</span>
-                    {% endif %}
-                </li>
-                <li><strong>Data inizio collezione:</strong> <span id="statStartDate">{{ stats.start_date or '-' }}</span></li>
-                <li><strong>Giorni in collezione:</strong> <span id="statDays">{{ stats.days_in_collection or '-' }}</span></li>
-            </ul>
+        </div>
+        <!-- Feed di news e attività -->
+        <div class="feed-container">
+            <!-- Due card di news con placeholder. In futuro saranno rimpiazzate da feed RSS personalizzati -->
+            <div class="feed-card news-card">
+                <h4>Novità</h4>
+                <p>In arrivo nuove funzionalità su Collector Street. Resta sintonizzato!</p>
+            </div>
+            <div class="feed-card news-card">
+                <h4>Novità</h4>
+                <p>Nuovi giochi retro aggiunti al nostro blog! Dai un'occhiata alla sezione Notizie.</p>
+            </div>
+            <!-- Due card di attività personali. Verranno riempite via JS -->
+            <div class="feed-card personal-card">
+                <h4>Attività recente</h4>
+                <p>Caricamento...</p>
+            </div>
+            <div class="feed-card personal-card">
+                <h4>Attività recente</h4>
+                <p>Caricamento...</p>
+            </div>
+            <!-- Card attività globale visibile solo per admin -->
+            {% if user.username == 'admin' %}
+            <div class="feed-card" id="globalCard">
+                <h4>Attività applicazione</h4>
+                <p>Nessuna nuova attività.</p>
+            </div>
+            {% endif %}
         </div>
     </section>
+    <!-- Script per gestione logout e dashboard -->
     <script>
-        // Logout button handler
+        // Handler del bottone di logout: chiama l'endpoint e poi reindirizza alla login
         document.getElementById('logoutBtn').addEventListener('click', async () => {
             await fetch('/logout', { method: 'POST' });
             window.location.href = '/';
         });
-        // Update statistics via API
-        document.getElementById('updateStatsBtn').addEventListener('click', async () => {
-            try {
-                const res = await fetch('/api/profile/stats');
-                if (res.ok) {
-                    const stats = await res.json();
-                    // Update DOM elements
-                    const totalSpentSpan = document.getElementById('statTotalSpent');
-                    const totalSoldSpan = document.getElementById('statTotalSold');
-                    const roiSpan = document.getElementById('statROI');
-                    const startDateSpan = document.getElementById('statStartDate');
-                    const daysSpan = document.getElementById('statDays');
-                    if (stats.currency) {
-                        totalSpentSpan.textContent = stats.total_spent.toFixed(2);
-                        totalSoldSpan.textContent = stats.total_sold.toFixed(2);
-                        if (stats.roi !== null && stats.roi !== undefined) {
-                            roiSpan.textContent = (stats.roi * 100).toFixed(2);
-                        } else {
-                            roiSpan.textContent = '-';
-                        }
-                    } else {
-                        totalSpentSpan.textContent = '-';
-                        totalSoldSpan.textContent = '-';
-                        roiSpan.textContent = '-';
-                    }
-                    startDateSpan.textContent = stats.start_date || '-';
-                    daysSpan.textContent = stats.days_in_collection || '-';
-                }
-            } catch (err) {
-                console.error(err);
-            }
-        });
     </script>
+    <!-- Script dedicato alla pagina Home -->
+    <script src="{{ url_for('static', filename='home.js') }}"></script>
 </body>
 </html>

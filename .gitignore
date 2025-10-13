@@ -25,8 +25,3 @@ Thumbs.db
 app.py
 static/uploads/*
 database.db
-
-
-, inoltre predisponi il tutto per come fosse un app multiutente anche mia moglie vuole utilizzarlo per il suo inventario e quindi una collezione a se stante
-static/uploads/profile_1_20251012003615058325.png
-static/uploads/profile.png

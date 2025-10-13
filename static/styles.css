@@ -500,6 +500,80 @@ nav .actions button:hover {
     background-color: #007174;
 }
 
+/* ====== Home (Dashboard) ====== */
+.home-container {
+    padding: 20px;
+}
+
+/* Card statistiche nella pagina home */
+.stats-card {
+    background-color: #ffffff;
+    border: 1px solid #dddddd;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Grafico a barre per speso vs venduto */
+.bar-chart {
+    display: flex;
+    height: 20px;
+    margin-bottom: 10px;
+    background-color: #e9ecef;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.bar {
+    height: 100%;
+}
+.bar.spent {
+    background-color: #d9534f; /* rosso per il totale speso */
+}
+.bar.sold {
+    background-color: #5cb85c; /* verde per il totale venduto */
+}
+
+/* Sezione numerica per totali */
+.stats-numbers {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+}
+
+/* Indicatore ROI */
+.roi-indicator {
+    margin-bottom: 10px;
+    font-size: 0.9em;
+}
+
+/* Contenitore per feed cards */
+.feed-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 15px;
+}
+
+/* Card generica nel feed */
+.feed-card {
+    background-color: #ffffff;
+    border: 1px solid #dddddd;
+    border-radius: 6px;
+    padding: 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.feed-card h4 {
+    margin-top: 0;
+    color: #008489;
+}
+
+.feed-card p {
+    margin: 8px 0 0 0;
+    font-size: 0.9em;
+}
+
 .success-msg {
     color: #3c763d;
     background-color: #dff0d8;
