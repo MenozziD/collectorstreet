@@ -688,6 +688,47 @@ def create_app(db_path: str = "database.db") -> Flask:
         stats = compute_profile_stats(user_dict)
         return jsonify(stats)
 
+    @app.route('/register', methods=['GET', 'POST'])
+    def register():
+        """
+        Visualizza il form di registrazione e gestisce l'inserimento di un nuovo utente.
+        Le richieste GET restituiscono il template del form, mentre le richieste POST
+        si aspettano un payload JSON con i campi dell'utente. Viene verificata
+        l'unicità dello username e che username e password siano valorizzati.
+        """
+        if request.method == 'POST':
+            # Accetta sia JSON che dati form. Prevale JSON se inviato.
+            data = request.get_json(silent=True) or request.form
+            username = (data.get('username') or '').strip()
+            password = (data.get('password') or '').strip()
+            nickname = (data.get('nickname') or '').strip() or None
+            ref_currency = (data.get('ref_currency') or '').strip() or None
+            vinted_link = (data.get('vinted_link') or '').strip() or None
+            cardmarket_link = (data.get('cardmarket_link') or '').strip() or None
+            ebay_link = (data.get('ebay_link') or '').strip() or None
+            facebook_link = (data.get('facebook_link') or '').strip() or None
+            # Controlla campi obbligatori
+            if not username or not password:
+                return jsonify({'error': 'Username e password sono obbligatori.'}), 400
+            # Verifica unicità username
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM users WHERE username = ?", (username,))
+            if cur.fetchone():
+                conn.close()
+                return jsonify({'error': 'Username già esistente.'}), 400
+            # Inserisci nuovo utente
+            cur.execute(
+                "INSERT INTO users (username, password, nickname, ref_currency, vinted_link, cardmarket_link, ebay_link, facebook_link) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (username, password, nickname, ref_currency, vinted_link, cardmarket_link, ebay_link, facebook_link)
+            )
+            conn.commit()
+            conn.close()
+            return jsonify({'message': 'Utente registrato con successo'}), 201
+        # Metodo GET: mostra il form di registrazione
+        return render_template('register.html')
+
     # Admin endpoints to manage users. Only the admin user (username 'admin') can perform these operations.
     def require_admin(f):
         """Decorator to restrict access to admin-only endpoints."""
