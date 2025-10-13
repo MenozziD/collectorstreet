@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collector Street - Registrati</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="login-container">
+        <h2>Registrati a Collector Street</h2>
+        <form id="registerForm">
+            <input type="text" id="regUsername" placeholder="Username" required>
+            <input type="password" id="regPassword" placeholder="Password" required>
+            <input type="text" id="regNickname" placeholder="Nickname">
+            <!-- Valuta di riferimento -->
+            <select id="regRefCurrency">
+                <option value="">Seleziona valuta</option>
+                <option value="EUR">EUR</option>
+                <option value="USD">USD</option>
+                <option value="JPY">JPY</option>
+                <option value="GBP">GBP</option>
+                <option value="CNY">CNY</option>
+            </select>
+            <input type="url" id="regVinted" placeholder="Link Vinted">
+            <input type="url" id="regCardmarket" placeholder="Link Card Market">
+            <input type="url" id="regEbay" placeholder="Link eBay">
+            <input type="url" id="regFacebook" placeholder="Link Facebook Marketplace">
+            <button type="submit">Registrati</button>
+        </form>
+        <div id="registerError" class="error"></div>
+        <p>Hai già un account? <a href="/">Accedi</a></p>
+    </div>
+    <script>
+        // Gestione invio del form di registrazione
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value.trim();
+            const nickname = document.getElementById('regNickname').value.trim();
+            const ref_currency = document.getElementById('regRefCurrency').value;
+            const vinted_link = document.getElementById('regVinted').value.trim();
+            const cardmarket_link = document.getElementById('regCardmarket').value.trim();
+            const ebay_link = document.getElementById('regEbay').value.trim();
+            const facebook_link = document.getElementById('regFacebook').value.trim();
+            const registerError = document.getElementById('registerError');
+            registerError.textContent = '';
+            try {
+                const res = await fetch('/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username,
+                        password,
+                        nickname: nickname || null,
+                        ref_currency: ref_currency || null,
+                        vinted_link: vinted_link || null,
+                        cardmarket_link: cardmarket_link || null,
+                        ebay_link: ebay_link || null,
+                        facebook_link: facebook_link || null
+                    })
+                });
+                if (res.ok) {
+                    // Registrazione avvenuta, reindirizza alla pagina di login
+                    window.location.href = '/';
+                } else {
+                    const data = await res.json();
+                    registerError.textContent = data.error || 'Errore durante la registrazione.';
+                }
+            } catch (err) {
+                console.error('Errore nella registrazione', err);
+                registerError.textContent = 'Errore imprevisto. Riprova più tardi.';
+            }
+        });
+    </script>
+</body>
+</html>

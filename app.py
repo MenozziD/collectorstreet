@@ -88,6 +88,10 @@ def create_app(db_path: str = "database.db") -> Flask:
                 condition TEXT,
                 currency TEXT,
                 language TEXT,
+                fair_value REAL,
+                price_p05 REAL,
+                price_p95 REAL,
+                valuation_date TEXT,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )
             """
@@ -102,6 +106,10 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('currency', 'TEXT'),
             ('language', 'TEXT'),
             ('purchase_price_curr_ref', 'REAL')
+            ,('fair_value', 'REAL'),
+            ('price_p05', 'REAL'),
+            ('price_p95', 'REAL'),
+            ('valuation_date', 'TEXT')
         ]:
             try:
                 cur.execute(f"ALTER TABLE items ADD COLUMN {column} {col_type}")
@@ -171,6 +179,46 @@ def create_app(db_path: str = "database.db") -> Flask:
         # If unknown currency, return original amount
         return amount
 
+    def estimate_valuation(item: sqlite3.Row) -> dict:
+        """
+        Estimate a fair market value and price range for an item using a simple heuristic.
+        For this MVP, the function uses the purchase price or sale price as a base and applies
+        multipliers to derive a range. If both prices are missing or zero, returns None values.
+
+        Args:
+            item (sqlite3.Row): The database row representing the item.
+
+        Returns:
+            dict: A dictionary with keys fair_value, price_p05, price_p95 and valuation_date.
+        """
+        base_price = None
+        # Prefer sale_price if available for a more recent market indicator
+        try:
+            if item['sale_price'] is not None and float(item['sale_price']) > 0:
+                base_price = float(item['sale_price'])
+            elif item['purchase_price'] is not None and float(item['purchase_price']) > 0:
+                base_price = float(item['purchase_price'])
+        except Exception:
+            base_price = None
+        if not base_price:
+            return {
+                'fair_value': None,
+                'price_p05': None,
+                'price_p95': None,
+                'valuation_date': None
+            }
+        # Apply simple multipliers to compute median and range
+        fair_value = base_price * 1.2  # assume 20% appreciation
+        price_p05 = base_price * 0.8  # -20% low estimate
+        price_p95 = base_price * 1.4  # +40% high estimate
+        val_date = date.today().isoformat()
+        return {
+            'fair_value': fair_value,
+            'price_p05': price_p05,
+            'price_p95': price_p95,
+            'valuation_date': val_date
+        }
+
     def compute_profile_stats(user: dict) -> dict:
         """
         Compute summary statistics for the user's collection in their reference currency.
@@ -192,8 +240,11 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'days_in_collection': None,
                 'currency': None
             }
-        total_spent: float = 0.0
-        total_sold: float = 0.0
+        # Somme per le statistiche
+        total_spent_all: float = 0.0  # somma speso su tutti gli oggetti
+        total_spent_sold: float = 0.0  # somma speso solo per gli oggetti venduti
+        total_sold: float = 0.0        # somma venduto (incasso)
+        item_count: int = 0
         first_date = None
         # Fetch only the items belonging to this user
         conn = get_db_connection()
@@ -205,8 +256,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             cur.execute("SELECT * FROM items WHERE 1=0")  # no items for anonymous user
         items = cur.fetchall()
         conn.close()
+        item_count = len(items)
         for item in items:
-            # Compute purchase amount in the reference currency on the fly.
+            # Calcola l'importo di acquisto convertito nella valuta di riferimento
             purchase_val: float = 0.0
             if item['purchase_price'] is not None:
                 try:
@@ -220,9 +272,12 @@ def create_app(db_path: str = "database.db") -> Flask:
                         purchase_val = amt
                 else:
                     purchase_val = amt
-            total_spent += purchase_val
-            # Compute sale amount in the reference currency on the fly
+                total_spent_all += purchase_val
+            # Se l'oggetto è stato venduto, aggiungi il costo all'ammontare speso per ROI
             if item['sale_price'] is not None:
+                if item['purchase_price'] is not None:
+                    total_spent_sold += purchase_val
+                # Calcola l'importo di vendita convertito
                 try:
                     s_amt = float(item['sale_price'])
                 except Exception:
@@ -234,7 +289,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                     except Exception:
                         sale_val = s_amt
                 total_sold += sale_val
-            # Determine earliest purchase date
+            # Determina la data di acquisto più antica per calcolare la durata della collezione
             if item['purchase_date']:
                 try:
                     dt = datetime.strptime(item['purchase_date'], '%Y-%m-%d').date()
@@ -242,21 +297,23 @@ def create_app(db_path: str = "database.db") -> Flask:
                         first_date = dt
                 except Exception:
                     pass
-        # Compute ROI
+        # ROI calcolato solo sugli oggetti venduti
         roi = None
-        if total_spent > 0:
-            roi = (total_sold - total_spent) / total_spent
+        if total_spent_sold > 0:
+            roi = (total_sold - total_spent_sold) / total_spent_sold
         start_date_str = None
         days_in_collection = None
         if first_date:
             start_date_str = first_date.isoformat()
             days_in_collection = (date.today() - first_date).days
         return {
-            'total_spent': total_spent,
+            'total_spent': total_spent_sold,      # speso sui venduti
+            'total_spent_all': total_spent_all,  # speso complessivo (tutti gli oggetti)
             'total_sold': total_sold,
             'roi': roi,
             'start_date': start_date_str,
             'days_in_collection': days_in_collection,
+            'item_count': item_count,
             'currency': ref
         }
 
@@ -367,6 +424,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                     roi = (item['sale_price'] - item['purchase_price']) / item['purchase_price']
                 except Exception:
                     roi = None
+            # Estimate valuation for this item
+            valuation = estimate_valuation(item)
             result.append({
                 'id': item['id'],
                 'name': item['name'],
@@ -385,7 +444,11 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'condition': item['condition'],
                 'currency': item['currency'],
                 'time_in_collection': time_in_collection,
-                'roi': roi
+                'roi': roi,
+                'fair_value': valuation.get('fair_value'),
+                'price_p05': valuation.get('price_p05'),
+                'price_p95': valuation.get('price_p95'),
+                'valuation_date': valuation.get('valuation_date')
             })
         return jsonify(result)
 
@@ -678,6 +741,75 @@ def create_app(db_path: str = "database.db") -> Flask:
         user_dict = dict(user) if user else {}
         stats = compute_profile_stats(user_dict)
         return jsonify(stats)
+
+    @app.route('/api/items/<int:item_id>/valuation', methods=['GET'])
+    @require_login
+    def get_item_valuation(item_id: int):
+        """
+        Compute and return the estimated valuation for a specific item. The item must belong
+        to the logged-in user. Returns 404 if the item is not found.
+
+        Args:
+            item_id (int): ID of the item to valuate.
+
+        Returns:
+            JSON: A dictionary with fair_value, price_p05, price_p95, valuation_date and currency.
+        """
+        user_id = session.get('user_id')
+        if user_id is None:
+            return jsonify({'error': 'Unauthorized'}), 401
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ? AND user_id = ?", (item_id, user_id))
+        item = cur.fetchone()
+        conn.close()
+        if not item:
+            return jsonify({'error': 'Item not found'}), 404
+        valuation = estimate_valuation(item)
+        # Include the item's currency for clarity
+        valuation['currency'] = item['currency']
+        return jsonify(valuation)
+
+    @app.route('/register', methods=['GET', 'POST'])
+    def register():
+        """
+        Visualizza il form di registrazione e gestisce l'inserimento di un nuovo utente.
+        Le richieste GET restituiscono il template del form, mentre le richieste POST
+        si aspettano un payload JSON con i campi dell'utente. Viene verificata
+        l'unicità dello username e che username e password siano valorizzati.
+        """
+        if request.method == 'POST':
+            # Accetta sia JSON che dati form. Prevale JSON se inviato.
+            data = request.get_json(silent=True) or request.form
+            username = (data.get('username') or '').strip()
+            password = (data.get('password') or '').strip()
+            nickname = (data.get('nickname') or '').strip() or None
+            ref_currency = (data.get('ref_currency') or '').strip() or None
+            vinted_link = (data.get('vinted_link') or '').strip() or None
+            cardmarket_link = (data.get('cardmarket_link') or '').strip() or None
+            ebay_link = (data.get('ebay_link') or '').strip() or None
+            facebook_link = (data.get('facebook_link') or '').strip() or None
+            # Controlla campi obbligatori
+            if not username or not password:
+                return jsonify({'error': 'Username e password sono obbligatori.'}), 400
+            # Verifica unicità username
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM users WHERE username = ?", (username,))
+            if cur.fetchone():
+                conn.close()
+                return jsonify({'error': 'Username già esistente.'}), 400
+            # Inserisci nuovo utente
+            cur.execute(
+                "INSERT INTO users (username, password, nickname, ref_currency, vinted_link, cardmarket_link, ebay_link, facebook_link) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (username, password, nickname, ref_currency, vinted_link, cardmarket_link, ebay_link, facebook_link)
+            )
+            conn.commit()
+            conn.close()
+            return jsonify({'message': 'Utente registrato con successo'}), 201
+        # Metodo GET: mostra il form di registrazione
+        return render_template('register.html')
 
     # Admin endpoints to manage users. Only the admin user (username 'admin') can perform these operations.
     def require_admin(f):

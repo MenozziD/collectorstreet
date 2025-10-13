@@ -435,6 +435,18 @@ function renderItems(items) {
             roi.innerHTML = `<strong>ROI:</strong> ${perc}%`;
             card.appendChild(roi);
         }
+        // Valore stimato e range di mercato
+        if (item.fair_value !== null && item.fair_value !== undefined) {
+            const fv = document.createElement('p');
+            const cur = item.currency || '';
+            fv.innerHTML = `<strong>Valore stimato:</strong> ${item.fair_value.toFixed(2)} ${cur}`;
+            card.appendChild(fv);
+            if (item.price_p05 !== null && item.price_p95 !== null) {
+                const range = document.createElement('p');
+                range.innerHTML = `<strong>Range:</strong> ${item.price_p05.toFixed(2)} - ${item.price_p95.toFixed(2)} ${cur}`;
+                card.appendChild(range);
+            }
+        }
         if (item.marketplace_link) {
             const link = document.createElement('a');
             link.href = item.marketplace_link;
