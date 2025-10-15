@@ -6,11 +6,11 @@
     <title>Collector Street - Profilo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}">
+<body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}" style="-ms-overflow-style: none;">
     
     <nav>
-        <h1>Collector Street</h1>
-        <div class="actions icons" style="align-items: center; align-self: center;">
+        <h1 class="logo-title">Collector Street</h1>
+        <div class="actions icons">
             <a href="/home" class="icon-btn" title="Home" aria-label="Home">
                 <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
                     <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-10.5z" fill="currentColor"/>
@@ -28,7 +28,7 @@
                 </svg>
             </a>
         </div>
-        <div class="actions icons">
+        <div class="sub-actions icons">
             <a href="/api/export/csv" class="icon-btn" id="exportCsvBtnProfile" title="Esporta CSV" aria-label="Esporta CSV"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM12 2l4 4h-3v6h-2V6H8l4-4z" fill="currentColor"/></svg></a>
             <!-- <button id="logoutBtn" class="icon-btn danger" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M10 17l1.41-1.41L8.83 13H21v-2H8.83l2.58-2.59L10 7l-5 5 5 5zM4 19h7v2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7v2H4z" fill="currentColor"/></svg></button>-->
             <button id="logoutBtn" class="icon-btn danger" title="Logout" aria-label="Logout">

@@ -6,11 +6,11 @@
     <title>Collector Street - Home</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}">
+<body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}" style="-ms-overflow-style: none;">
     
     <nav>
-        <h1>Collector Street</h1>
-        <div class="actions icons" style="align-items: center; align-self: center;">
+        <h1 class="logo-title">Collector Street</h1>
+        <div class="actions icons">
             <a href="/home" class="icon-btn" title="Home" aria-label="Home">
                 <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
                     <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-10.5z" fill="currentColor"/>
@@ -28,7 +28,7 @@
                 </svg>
             </a>
         </div>
-        <div class="actions icons">
+        <div class="sub-actions icons">
             <!-- EXPORT_SLOT 
             <button id="logoutBtn" class="icon-btn danger" title="Logout" aria-label="Logout">
                 <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">

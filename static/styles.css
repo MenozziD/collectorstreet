@@ -585,9 +585,30 @@ nav .actions button:hover {
 /* Icon-only buttons for navbar */
 nav .actions.icons {
     display: flex;
+    width: 50%;
     align-items: center;
+    justify-content: center;
+    text-align: center;
     gap: 8px;
 }
+nav .logo-title {
+    display: flex;
+    width: 25%;
+    align-items: start;
+    justify-content: left;
+    text-align: left;
+    gap: 8px;
+}
+
+nav .sub-actions.icons {
+    display: flex;
+    width: 25%;
+    align-items: end;
+    justify-content: right;
+    text-align: right;
+    gap: 8px;
+}
+
 .icon-btn {
     display: inline-flex;
     align-items: center;
@@ -623,6 +644,20 @@ nav .actions.icons {
 
 
 /* === THEME SUPPORT =============================================== */
+html {
+  overflow-y: scroll; /* mantiene lo scroll verticale */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer 10+ */
+  overflow-y: overlay;
+}
+
+/* Chrome, Edge, Safari */
+html::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  background: transparent;
+}
+
 body.theme-night {
     background-color: #0f172a; color: #e5e7eb;
 }
@@ -634,6 +669,8 @@ body.theme-night .icon-btn.primary { background:#334155; border-color:#1f2937; c
 body.theme-night .icon-btn.primary:hover { background:#1f2937; }
 body.theme-night .icon-btn.danger { background:#7f1d1d; border-color:#7f1d1d; color:#fde8e8; }
 body.theme-night .icon-btn.danger:hover { background:#6b1515; }
+body.theme-night button { background:#334155; border-color:#1f2937; color:#e5e7eb;}
+body.theme-night button:hover { background:#1f2937; }
 body.theme-night .login-container,
 body.theme-night .profile-card, 
 body.theme-night .profile-edit,
@@ -653,6 +690,8 @@ body.theme-sakura .icon-btn:hover { background:#ffe8f1; }
 body.theme-sakura .icon-btn.primary { background:#e78fb3; border-color:#d96a99; color:#ffffff; }
 body.theme-sakura .icon-btn.primary:hover { background:#d96a99; }
 body.theme-sakura .icon-btn.danger { background:#f0ad4e; border-color:#f0ad4e; color:#ffffff; }
+body.theme-sakura button { background:#e78fb3; border-color:#d96a99; color:#ffffff; }
+body.theme-sakura button:hover { background:#d96a99; }
 body.theme-sakura .login-container,
 body.theme-sakura .profile-card,
 body.theme-sakura .profile-edit,
