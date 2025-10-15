@@ -581,3 +581,85 @@ nav .actions button:hover {
     padding: 8px;
     border-radius: 4px;
 }
+
+/* Icon-only buttons for navbar */
+nav .actions.icons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid #dddddd;
+    background: #ffffff;
+    color: #008489;
+    cursor: pointer;
+    text-decoration: none;
+}
+.icon-btn:hover {
+    background: #e2f2f4;
+}
+.icon-btn.primary {
+    color: #ffffff;
+    background: #008489;
+    border-color: #007174;
+}
+.icon-btn.primary:hover {
+    background: #007174;
+}
+.icon-btn.danger {
+    color: #ffffff;
+    background: #d9534f;
+    border-color: #d9534f;
+}
+.icon-btn.danger:hover {
+    background: #c64541;
+}
+
+
+/* === THEME SUPPORT =============================================== */
+body.theme-night {
+    background-color: #0f172a; color: #e5e7eb;
+}
+body.theme-night nav { background-color: #111827; border-bottom-color: #1f2937; }
+body.theme-night nav h1 { color: #e5e7eb; }
+body.theme-night .icon-btn { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+body.theme-night .icon-btn:hover { background:#111827; }
+body.theme-night .icon-btn.primary { background:#334155; border-color:#1f2937; color:#e5e7eb; }
+body.theme-night .icon-btn.primary:hover { background:#1f2937; }
+body.theme-night .icon-btn.danger { background:#7f1d1d; border-color:#7f1d1d; color:#fde8e8; }
+body.theme-night .icon-btn.danger:hover { background:#6b1515; }
+body.theme-night .login-container,
+body.theme-night .profile-card, 
+body.theme-night .profile-edit,
+body.theme-night .profile-stats,
+body.theme-night .item-card,
+body.theme-night .feed-card,
+body.theme-night .modal-content { background:#1f2937; color:#e5e7eb; border-color:#374151; }
+body.theme-night input, body.theme-night select, body.theme-night textarea { background:#111827; color:#e5e7eb; border-color:#374151; }
+body.theme-night a { color:#22d3ee; }
+body.theme-night .success-msg { background:#064e3b; color:#d1fae5; border-color:#065f46; }
+
+body.theme-sakura { background-color:#fff7fa; color:#4a3848; }
+body.theme-sakura nav { background:#ffffff; border-bottom-color:#ffd6e7; }
+body.theme-sakura nav h1 { color:#e78fb3; }
+body.theme-sakura .icon-btn { background:#ffffff; border-color:#ffd6e7; color:#d75a8a; }
+body.theme-sakura .icon-btn:hover { background:#ffe8f1; }
+body.theme-sakura .icon-btn.primary { background:#e78fb3; border-color:#d96a99; color:#ffffff; }
+body.theme-sakura .icon-btn.primary:hover { background:#d96a99; }
+body.theme-sakura .icon-btn.danger { background:#f0ad4e; border-color:#f0ad4e; color:#ffffff; }
+body.theme-sakura .login-container,
+body.theme-sakura .profile-card,
+body.theme-sakura .profile-edit,
+body.theme-sakura .profile-stats,
+body.theme-sakura .item-card,
+body.theme-sakura .feed-card,
+body.theme-sakura .modal-content { background:#ffffff; color:#4a3848; border-color:#ffd6e7; }
+body.theme-sakura input, body.theme-sakura select, body.theme-sakura textarea { background:#fff7fa; color:#4a3848; border-color:#ffd6e7; }
+body.theme-sakura a { color:#d75a8a; }
+body.theme-sakura .success-msg { background:#ffe8f1; color:#4a3848; border-color:#ffd6e7; }

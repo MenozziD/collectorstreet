@@ -104,12 +104,12 @@ function initApp() {
     tagFilter.addEventListener('input', () => fetchItems());
 
     // Eventi bottoni
-    addItemBtn.addEventListener('click', () => {
+    addItemBtn?.addEventListener('click', () => {
         clearItemForm();
         modalTitle.textContent = 'Nuovo Item';
         openModal();
     });
-    exportCsvBtn.addEventListener('click', () => {
+    exportCsvBtn?.addEventListener('click', () => {
         const params = new URLSearchParams();
         if (searchInput.value.trim()) params.append('q', searchInput.value.trim());
         if (categoryFilter.value) params.append('category', categoryFilter.value);
@@ -119,7 +119,7 @@ function initApp() {
     // exportPdfBtn?.addEventListener('click', () => {
     //     // Da implementare quando la funzionalità sarà pronta
     // });
-    logoutBtn.addEventListener('click', async () => {
+    logoutBtn?.addEventListener('click', async () => {
         try {
             await fetch('/logout', { method: 'POST' });
         } catch (err) {
