@@ -77,6 +77,7 @@ async function fetchUserInfo() {
         if (res.ok) {
             const data = await res.json();
             USER_REF_CURRENCY = data.ref_currency || null;
+            updateRefCurrencyLabel();
         }
     } catch (err) {
         console.error('Errore recupero utente:', err);
@@ -124,7 +125,18 @@ function initApp() {
             toggleAdvancedBtn.textContent = 'Altre informazioni';
         }
     });
-    // Eventi bottoni
+    
+    // Aggiorna indicatore valuta di riferimento e conversione
+    updateRefCurrencyLabel();
+    document.getElementById('purchasePrice')?.addEventListener('input', () => { validateFields(); updateConversion(); });
+    document.getElementById('currency')?.addEventListener('change', () => { validateFields(); updateConversion(); });
+    document.getElementById('purchaseDate')?.addEventListener('change', validateFields);
+    document.getElementById('salePrice')?.addEventListener('input', validateFields);
+    document.getElementById('saleDate')?.addEventListener('change', validateFields);
+    document.getElementById('quantity')?.addEventListener('input', validateFields);
+    document.getElementById('marketplaceLink')?.addEventListener('input', validateFields);
+
+// Eventi bottoni
     addItemBtn?.addEventListener('click', () => {
         clearItemForm();
         modalTitle.textContent = 'Nuovo Item';
@@ -549,6 +561,9 @@ function populateCategories(items) {
 }
 
 function openModal(item = null) {
+    // reset label/hints
+    updateRefCurrencyLabel();
+    setHint('purchasePriceHint',''); setHint('purchaseDateHint',''); setHint('purchasePriceRefHint',''); setHint('salePriceHint',''); setHint('saleDateHint',''); setHint('quantityHint',''); setHint('marketplaceLinkHint','');
     const modalContentEl = document.querySelector('#itemModal .modal-content');
     const advancedFields = document.querySelector('#itemModal .advanced-fields');
     if (modalContentEl && modalContentEl.classList.contains('expanded')) { modalContentEl.classList.remove('expanded'); }
@@ -629,4 +644,76 @@ function clearItemForm() {
     document.getElementById('currency').value = '';
     const refInput = document.getElementById('purchasePriceRef');
     if (refInput) refInput.value = '';
+}
+
+// === Inline validation & conversion ===
+function setHint(id, msg, cls='') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.remove('error','warn','ok');
+    if (cls) el.classList.add(cls);
+}
+
+async function updateConversion() {
+    const priceEl = document.getElementById('purchasePrice');
+    const curEl = document.getElementById('currency');
+    const refEl = document.getElementById('purchasePriceRef');
+    const lbl = document.getElementById('refCurrencyLabel');
+    if (!priceEl || !curEl || !refEl) return;
+    const amount = parseFloat(priceEl.value);
+    const from = curEl.value || 'EUR';
+    const to = (USER_REF_CURRENCY || 'EUR');
+    if (!amount || isNaN(amount)) {
+        setHint('purchasePriceRefHint','', '');
+        return;
+    }
+    try {
+        const q = new URLSearchParams({ amount: amount.toString(), from, to }).toString();
+        const res = await fetch(`/api/convert?${q}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (typeof data.result === 'number') {
+                refEl.value = data.result.toFixed(2);
+                setHint('purchasePriceRefHint', `≈ ${data.result.toFixed(2)} ${to}`, 'ok');
+            } else {
+                setHint('purchasePriceRefHint','Conversione non disponibile', 'warn');
+            }
+        } else {
+            setHint('purchasePriceRefHint','Errore conversione', 'warn');
+        }
+    } catch (e) {
+        setHint('purchasePriceRefHint','Errore rete conversione', 'warn');
+    }
+}
+
+function validateFields() {
+    // Prezzi
+    const p = parseFloat(document.getElementById('purchasePrice').value);
+    const s = parseFloat(document.getElementById('salePrice').value);
+    if (p < 0) setHint('purchasePriceHint','Il prezzo di acquisto non può essere negativo','error');
+    else if (p === 0) setHint('purchasePriceHint','Zero? Verifica se è corretto','warn');
+    else setHint('purchasePriceHint','', '');
+
+    if (s < 0) setHint('salePriceHint','Il prezzo di vendita non può essere negativo','error');
+    else setHint('salePriceHint','', '');
+
+    // Date
+    const pd = document.getElementById('purchaseDate').value ? new Date(document.getElementById('purchaseDate').value) : null;
+    const sd = document.getElementById('saleDate').value ? new Date(document.getElementById('saleDate').value) : null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    if (pd && pd > today) setHint('purchaseDateHint','La data di acquisto è nel futuro','warn');
+    else setHint('purchaseDateHint','', '');
+    if (sd && pd && sd < pd) setHint('saleDateHint','La data di vendita è precedente alla data di acquisto','warn');
+    else setHint('saleDateHint','', '');
+
+    // Quantità
+    const q = parseInt(document.getElementById('quantity').value || '1', 10);
+    if (q < 1) setHint('quantityHint','La quantità deve essere almeno 1','error');
+    else setHint('quantityHint','', '');
+
+    // Link
+    const link = document.getElementById('marketplaceLink').value.trim();
+    if (link && !/^https?:\/\//i.test(link)) setHint('marketplaceLinkHint','Il link deve iniziare con http:// o https://','warn');
+    else setHint('marketplaceLinkHint','', '');
 }

@@ -683,6 +683,18 @@ body.theme-night a { color:#22d3ee; }
 body.theme-night .success-msg { background:#064e3b; color:#d1fae5; border-color:#065f46; }
 /* Theme adjustments for new controls */
 body.theme-night .toggle-advanced { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+/* Theme adjustments for new controls */
+body.theme-night .toggle-advanced { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+body.theme-night .toggle-advanced:hover { background:#111827; }
+body.theme-night .inline-suffix { background:#111827; border-color:#374151; color:#e5e7eb; }
+
+/* Themes */
+body.theme-night .section-title { color: #22d3ee; }
+body.theme-night .hint { color: #9ca3af; }
+body.theme-night .hint.error { color: #f87171; }
+body.theme-night .hint.warn { color: #fbbf24; }
+body.theme-night .hint.ok { color: #34d399; }
+
 
 body.theme-sakura { background-color:#fff7fa; color:#4a3848; }
 body.theme-sakura nav { background:#ffffff; border-bottom-color:#ffd6e7; }
@@ -706,6 +718,15 @@ body.theme-sakura a { color:#d75a8a; }
 body.theme-sakura .success-msg { background:#ffe8f1; color:#4a3848; border-color:#ffd6e7; }
 /* Theme adjustments for new controls */
 body.theme-sakura .toggle-advanced { background:#ffffff; border-color:#ffd6e7; color:#d75a8a; }
+body.theme-sakura .toggle-advanced { background:#ffffff; border-color:#ffd6e7; color:#d75a8a; }
+body.theme-sakura .toggle-advanced:hover { background:#ffe8f1; }
+body.theme-sakura .inline-suffix { background:#fff7fa; border-color:#ffd6e7; color:#4a3848; }
+
+body.theme-sakura .section-title { color: #d75a8a; }
+body.theme-sakura .hint { color: #7a5c6e; }
+body.theme-sakura .hint.error { color: #d9534f; }
+body.theme-sakura .hint.warn { color: #f0ad4e; }
+body.theme-sakura .hint.ok { color: #5cb85c; }
 
 /* Modal enhanced layout */
 .modal-content .modal-section { display: flex; flex-direction: column; gap: 8px; }
@@ -734,5 +755,24 @@ body.theme-sakura .toggle-advanced { background:#ffffff; border-color:#ffd6e7; c
     text-align: center;
     background: #f8f9fa;
 }
+
+.section-title {
+    margin: 12px 0 4px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #008489;
+}
+.field-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.hint {
+    font-size: 0.8rem;
+    margin-top: -4px;
+    margin-bottom: 6px;
+    color: #777777;
+}
+.hint.error { color: #d9534f; }
+.hint.warn { color: #f0ad4e; }
+.hint.ok { color: #5cb85c; }
+
+
 
 

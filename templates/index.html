@@ -58,14 +58,6 @@
                           title="Descrizione — Dettagli, note o varianti dell'item."></textarea>
                 <input type="text" id="itemCategory" placeholder="Categoria" required
                        title="Categoria — Es. 'trading card', 'console', 'action figure', 'videogame'.">
-                <input type="text" id="itemTags" placeholder="Tag (separati da virgola)"
-                       title="Tag — Parole chiave per filtrare/ricercare. Separale con virgole.">
-            </div>
-
-            <button type="button" id="toggleAdvancedBtn" class="toggle-advanced">Altre informazioni</button>
-
-            <!-- Sezione avanzata: nascosta finché non espansa -->
-            <div class="modal-section advanced-fields hidden">
                 <select id="itemLanguage"
                         title="Lingua — Lingua/edizione dell'item (ITA/ENG/JAP ecc.).">
                     <option value="">Seleziona lingua</option>
@@ -75,8 +67,16 @@
                     <option value="KOR">KOR</option>
                     <option value="CHS">CHS</option>
                 </select>
+                <input type="text" id="itemTags" placeholder="Tag (separati da virgola)"
+                       title="Tag — Parole chiave per filtrare/ricercare. Separale con virgole.">
+            </div>
 
-                <!-- Prezzo d'acquisto + valuta sulla stessa riga -->
+            <button type="button" id="toggleAdvancedBtn" class="toggle-advanced">Altre informazioni</button>
+
+            <!-- Sezione avanzata: gruppi tematici -->
+            <div class="modal-section advanced-fields hidden">
+
+                <h3 class="section-title">Acquisto</h3>
                 <div class="field-row"
                      title="Prezzo di acquisto — Valore pagato, con la sua valuta.">
                     <input type="number" step="0.01" id="purchasePrice" placeholder="Prezzo di acquisto">
@@ -89,27 +89,31 @@
                         <option value="CNY">CNY</option>
                     </select>
                 </div>
+                <div class="hint" id="purchasePriceHint"></div>
 
                 <input type="date" id="purchaseDate" placeholder="Data di acquisto"
                        title="Data di acquisto — Quando hai acquistato l'item.">
+                <div class="hint" id="purchaseDateHint"></div>
 
-                <input type="number" step="0.01" id="salePrice" placeholder="Prezzo di vendita"
-                       title="Prezzo di vendita — Valore di vendita (se venduto).">
-                <input type="date" id="saleDate" placeholder="Data di vendita"
-                       title="Data di vendita — Quando è stato venduto (se venduto).">
-
-                <!-- Prezzo in valuta di riferimento + label della valuta a destra (sola lettura) -->
                 <div class="field-row"
                      title="Prezzo in valuta di riferimento — Importo nella tua valuta profilo; l'etichetta a destra indica la valuta (sola lettura).">
                     <input type="number" step="0.01" id="purchasePriceRef" placeholder="Prezzo (valuta rif)">
                     <span class="inline-suffix" id="refCurrencyLabel">EUR</span>
                 </div>
+                <div class="hint" id="purchasePriceRefHint"></div>
 
-                <input type="url" id="marketplaceLink" placeholder="Link marketplace"
-                       title="Link marketplace — URL annuncio o pagina di riferimento.">
+                <h3 class="section-title">Vendita</h3>
+                <input type="number" step="0.01" id="salePrice" placeholder="Prezzo di vendita"
+                       title="Prezzo di vendita — Valore di vendita (se venduto).">
+                <div class="hint" id="salePriceHint"></div>
+                <input type="date" id="saleDate" placeholder="Data di vendita"
+                       title="Data di vendita — Quando è stato venduto (se venduto).">
+                <div class="hint" id="saleDateHint"></div>
 
+                <h3 class="section-title">Dettagli</h3>
                 <input type="number" min="1" id="quantity" placeholder="Quantità" value="1"
                        title="Quantità — Numero di unità possedute.">
+                <div class="hint" id="quantityHint"></div>
                 <select id="condition"
                         title="Condizione — Stato di conservazione (MT/NM/EXC/GD/LP/PL/POOR).">
                     <option value="">Seleziona condizione</option>
@@ -122,6 +126,12 @@
                     <option value="POOR">POOR</option>
                 </select>
 
+                <h3 class="section-title">Link marketplace</h3>
+                <input type="url" id="marketplaceLink" placeholder="Link marketplace"
+                       title="Link marketplace — URL annuncio o pagina di riferimento.">
+                <div class="hint" id="marketplaceLinkHint"></div>
+
+                <h3 class="section-title">Foto</h3>
                 <input type="file" id="image" accept="image/*"
                        title="Immagine — Carica una foto per l'item.">
             </div>
