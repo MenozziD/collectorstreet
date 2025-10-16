@@ -62,7 +62,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('ebay_link', 'TEXT'),
             ('facebook_link', 'TEXT'),
             ('ref_currency', 'TEXT')
-        ]:
+        
+            ,('theme', 'TEXT')]:
             try:
                 cur.execute(f"ALTER TABLE users ADD COLUMN {column} {col_type}")
             except sqlite3.OperationalError:
@@ -140,6 +141,263 @@ def create_app(db_path: str = "database.db") -> Flask:
     # Initialize database on app creation
     init_db()
 
+    # ----------------------------------------------------------------------
+    # TCGPlayer API integration
+    #
+    # To enable fetching market prices for trading cards, set the environment
+    # variables TCGPLAYER_PUBLIC_KEY and TCGPLAYER_PRIVATE_KEY with your
+    # developer credentials. The API requires obtaining an access token via
+    # client credentials and then using the catalog and pricing endpoints.
+    # See https://docs.tcgplayer.com/docs/getting-started for details.
+    tcgplayer_public_key = os.environ.get('TCGPLAYER_PUBLIC_KEY')
+    tcgplayer_private_key = os.environ.get('TCGPLAYER_PRIVATE_KEY')
+    # Token cache to avoid requesting a new token on every call
+    token_cache = {'token': None, 'expires_at': 0}
+
+    def get_tcgplayer_token() -> str | None:
+        """
+        Obtain an OAuth token from TCGPlayer. Caches the token until expiry.
+
+        Returns:
+            str or None: Bearer token string if credentials are configured and token retrieval succeeds, else None.
+        """
+        import base64
+        import time
+        if not tcgplayer_public_key or not tcgplayer_private_key:
+            return None
+        # Return cached token if still valid
+        if token_cache['token'] and token_cache['expires_at'] > time.time() + 60:
+            return token_cache['token']
+        # Compose basic auth header
+        creds = f"{tcgplayer_public_key}:{tcgplayer_private_key}"
+        b64_creds = base64.b64encode(creds.encode('utf-8')).decode('utf-8')
+        headers = {
+            'Authorization': f"Basic {b64_creds}",
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        data = {'grant_type': 'client_credentials'}
+        try:
+            resp = requests.post('https://api.tcgplayer.com/token', headers=headers, data=data, timeout=10)
+            if resp.status_code != 200:
+                return None
+            token_json = resp.json()
+            access_token = token_json.get('access_token')
+            expires_in = token_json.get('expires_in', 0)
+            if access_token:
+                token_cache['token'] = access_token
+                token_cache['expires_at'] = time.time() + int(expires_in)
+                return access_token
+        except Exception:
+            return None
+        return None
+
+    def get_tcgplayer_market_price(item_name: str) -> float | None:
+        """
+        Query TCGPlayer for market price of a card given its name. This function
+        searches for the product by name and retrieves the market price from
+        pricing endpoints. Requires valid API credentials.
+
+        Args:
+            item_name (str): Name of the card to search.
+
+        Returns:
+            float or None: Market price in USD if available; otherwise None.
+        """
+        # Without credentials, skip API call
+        token = get_tcgplayer_token()
+        if not token:
+            return None
+        # Search for the product
+        try:
+            search_headers = {'Authorization': f"Bearer {token}"}
+            params = {'productName': item_name, 'limit': 1, 'getExtendedFields': 'true'}
+            search_resp = requests.get('https://api.tcgplayer.com/catalog/products', headers=search_headers, params=params, timeout=10)
+            if search_resp.status_code != 200:
+                return None
+            search_data = search_resp.json()
+            results = search_data.get('results') or []
+            if not results:
+                return None
+            product = results[0]
+            product_id = product.get('productId')
+            if not product_id:
+                return None
+            # Fetch pricing for this product
+            price_resp = requests.get(f'https://api.tcgplayer.com/pricing/product/{product_id}', headers=search_headers, timeout=10)
+            if price_resp.status_code != 200:
+                return None
+            price_data = price_resp.json()
+            prices = price_data.get('results') or []
+            # The pricing results may include multiple entries; take the marketPrice of the first if present
+            for p in prices:
+                market = p.get('marketPrice')
+                if market is not None:
+                    try:
+                        return float(market)
+                    except Exception:
+                        continue
+            return None
+        except Exception:
+            return None
+
+    # ----------------------------------------------------------------------
+    # eBay API integration
+    #
+    # These functions allow fetching price data from eBay's Browse API. To use
+    # them, set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET environment variables.
+    # The API uses OAuth2.0 to obtain an access token. Rate limits apply.
+    ebay_client_id = os.environ.get('EBAY_CLIENT_ID')
+    ebay_client_secret = os.environ.get('EBAY_CLIENT_SECRET')
+    ebay_token_cache = {'token': None, 'expires_at': 0}
+
+    def get_ebay_token() -> str | None:
+        """Obtain an OAuth2 bearer token from eBay using client credentials."""
+        import time
+        import base64
+        if not ebay_client_id or not ebay_client_secret:
+            return None
+        # Return cached token if still valid
+        if ebay_token_cache['token'] and ebay_token_cache['expires_at'] > time.time() + 60:
+            return ebay_token_cache['token']
+        creds = f"{ebay_client_id}:{ebay_client_secret}"
+        b64_creds = base64.b64encode(creds.encode('utf-8')).decode('utf-8')
+        headers = {
+            'Authorization': f"Basic {b64_creds}",
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        data = {'grant_type': 'client_credentials', 'scope': 'https://api.ebay.com/oauth/api_scope/buy.browse'}
+        try:
+            resp = requests.post('https://api.ebay.com/identity/v1/oauth2/token', headers=headers, data=data, timeout=10)
+            if resp.status_code != 200:
+                return None
+            json_resp = resp.json()
+            token = json_resp.get('access_token')
+            expires_in = json_resp.get('expires_in', 0)
+            if token:
+                ebay_token_cache['token'] = token
+                ebay_token_cache['expires_at'] = time.time() + int(expires_in)
+                return token
+        except Exception:
+            return None
+        return None
+
+    def get_ebay_market_price(item_name: str) -> float | None:
+        """
+        Search eBay for the given item and return an approximate market price in
+        the item's listed currency. Uses the Browse API search endpoint.
+        """
+        token = get_ebay_token()
+        if not token:
+            return None
+        headers = {
+            'Authorization': f"Bearer {token}",
+            'Content-Type': 'application/json'
+        }
+        params = {
+            'q': item_name,
+            'limit': 10,
+            # filter: sold items only or buyNow available, etc.
+            # we do not restrict to sold items because we want current listings
+        }
+        try:
+            resp = requests.get('https://api.ebay.com/buy/browse/v1/item_summary/search', headers=headers, params=params, timeout=10)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            summaries = data.get('itemSummaries') or []
+            # Extract prices; choose median of first few items
+            prices = []
+            for s in summaries:
+                price_info = s.get('price')
+                if price_info and price_info.get('value') is not None:
+                    try:
+                        prices.append(float(price_info['value']))
+                    except Exception:
+                        pass
+            if not prices:
+                return None
+            # Return median of collected prices
+            prices.sort()
+            mid = len(prices) // 2
+            return prices[mid]
+        except Exception:
+            return None
+
+    # ----------------------------------------------------------------------
+    # PriceCharting API integration
+    #
+    # PriceCharting offers an API for video game prices. To use it, set
+    # PRICECHARTING_TOKEN in your environment. Note that this API is rate limited.
+    pricecharting_token = os.environ.get('PRICECHARTING_TOKEN')
+
+    def get_pricecharting_market_price(item_name: str) -> float | None:
+        """
+        Query PriceCharting for a given item and return its loose price in USD.
+        Requires a valid API token via PRICECHARTING_TOKEN.
+        """
+        if not pricecharting_token:
+            return None
+        try:
+            # Search for the product by name
+            search_params = {'t': pricecharting_token, 'q': item_name}
+            resp = requests.get('https://www.pricecharting.com/api/search', params=search_params, timeout=10)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            products = data.get('products') or []
+            if not products:
+                return None
+            product = products[0]
+            product_id = product.get('product_id') or product.get('productId')
+            if not product_id:
+                return None
+            # Fetch product details to get price
+            detail_params = {'t': pricecharting_token, 'id': product_id}
+            detail_resp = requests.get('https://www.pricecharting.com/api/product', params=detail_params, timeout=10)
+            if detail_resp.status_code != 200:
+                return None
+            detail = detail_resp.json()
+            # Choose loose price if available; otherwise use new price
+            loose_price = detail.get('loose_price') or detail.get('lowest_price')
+            if loose_price:
+                return float(loose_price)
+            return None
+        except Exception:
+            return None
+
+    # ----------------------------------------------------------------------
+    # JustTCG (or similar) API integration
+    #
+    # JustTCG provides pricing data for various trading card games. You must
+    # obtain an API key and set JUSTTCG_API_KEY. See justtcg.com for docs.
+    justtcg_api_key = os.environ.get('JUSTTCG_API_KEY')
+
+    def get_justtcg_market_price(item_name: str) -> float | None:
+        """
+        Query JustTCG for the market price of a trading card. Returns price in USD.
+        Requires a valid API key via JUSTTCG_API_KEY.
+        """
+        if not justtcg_api_key:
+            return None
+        try:
+            headers = {'Authorization': f"Bearer {justtcg_api_key}"}
+            params = {'q': item_name, 'limit': 1}
+            resp = requests.get('https://api.justtcg.com/v1/prices', headers=headers, params=params, timeout=10)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            results = data.get('results') or []
+            if not results:
+                return None
+            price_info = results[0]
+            price = price_info.get('price') or price_info.get('marketPrice')
+            if price:
+                return float(price)
+            return None
+        except Exception:
+            return None
+
+
     def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
         """
         Convert an amount from one currency to another using exchangerate.host free API.
@@ -192,14 +450,45 @@ def create_app(db_path: str = "database.db") -> Flask:
             dict: A dictionary with keys fair_value, price_p05, price_p95 and valuation_date.
         """
         base_price = None
-        # Prefer sale_price if available for a more recent market indicator
+        # Normalize category to determine which services to query
         try:
-            if item['sale_price'] is not None and float(item['sale_price']) > 0:
-                base_price = float(item['sale_price'])
-            elif item['purchase_price'] is not None and float(item['purchase_price']) > 0:
-                base_price = float(item['purchase_price'])
+            cat = (item['category'] or '').lower()
         except Exception:
-            base_price = None
+            cat = ''
+        # Build a list of functions to query based on category
+        price_fetchers = []
+        if cat == 'trading card':
+            price_fetchers.extend([
+                get_tcgplayer_market_price,
+                get_justtcg_market_price
+            ])
+        # For video games and similar categories, try PriceCharting and eBay
+        if cat in ('videogames', 'video games', 'console', 'cd', 'vynil', 'music', 'other', 'action figure'):
+            price_fetchers.extend([
+                get_pricecharting_market_price,
+                get_ebay_market_price
+            ])
+        # As a catch-all, always append eBay as last resort if not already in list
+        if get_ebay_market_price not in price_fetchers:
+            price_fetchers.append(get_ebay_market_price)
+        # Attempt each fetcher until a price is found
+        for fetch_fn in price_fetchers:
+            try:
+                m_price = fetch_fn(item['name'])
+            except Exception:
+                m_price = None
+            if m_price:
+                base_price = m_price
+                break
+        # If still no external price, fallback to sale_price or purchase_price
+        if base_price is None:
+            try:
+                if item['sale_price'] is not None and float(item['sale_price']) > 0:
+                    base_price = float(item['sale_price'])
+                elif item['purchase_price'] is not None and float(item['purchase_price']) > 0:
+                    base_price = float(item['purchase_price'])
+            except Exception:
+                base_price = None
         if not base_price:
             return {
                 'fair_value': None,
@@ -211,6 +500,18 @@ def create_app(db_path: str = "database.db") -> Flask:
         fair_value = base_price * 1.2  # assume 20% appreciation
         price_p05 = base_price * 0.8  # -20% low estimate
         price_p95 = base_price * 1.4  # +40% high estimate
+        # If we fetched market price from TCGPlayer, it's denominated in USD. Convert to the item's currency if known.
+        try:
+            if cat == 'trading card':
+                item_currency = item['currency']
+                if item_currency and item_currency.upper() != 'USD':
+                    # Convert each value from USD to the item's currency
+                    fair_value = convert_currency(fair_value, 'USD', item_currency)
+                    price_p05 = convert_currency(price_p05, 'USD', item_currency)
+                    price_p95 = convert_currency(price_p95, 'USD', item_currency)
+        except Exception:
+            # Ignore conversion errors and keep values in USD
+            pass
         val_date = date.today().isoformat()
         return {
             'fair_value': fair_value,
@@ -324,7 +625,14 @@ def create_app(db_path: str = "database.db") -> Flask:
         """
         if not session.get('logged_in'):
             return render_template('login.html')
-        return render_template('index.html')
+        conn = get_db_connection()
+        cur = conn.cursor()
+        user_id = session.get('user_id')
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        conn.close()
+        user_dict = dict(user) if user else {}
+        return render_template('index.html', user=user_dict)
 
     @app.route('/login', methods=['POST'])
     def login():
@@ -717,7 +1025,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             return jsonify({'error': 'Unauthorized'}), 401
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("SELECT id, username, nickname, ref_currency FROM users WHERE id = ?", (user_id,))
+        cur.execute("SELECT id, username, nickname, ref_currency, theme FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         conn.close()
         if user:
@@ -1037,6 +1345,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             files = request.files
             nickname = form.get('nickname')
             ref_currency = form.get('ref_currency')
+            theme = form.get('theme')
             vinted_link = form.get('vinted_link')
             cardmarket_link = form.get('cardmarket_link')
             ebay_link = form.get('ebay_link')
@@ -1050,6 +1359,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             if ref_currency is not None:
                 fields.append('ref_currency = ?')
                 values.append(ref_currency)
+            if theme:
+                fields.append('theme = ?')
+                values.append(theme)
             if vinted_link is not None:
                 fields.append('vinted_link = ?')
                 values.append(vinted_link)
