@@ -1,6 +1,11 @@
 // script.js - gestisce login e interazione con l'applicazione
 // Global variable to store the current user's reference currency
 let USER_REF_CURRENCY = null;
+function updateRefCurrencyLabel(){
+  const el = document.getElementById('refCurrencyLabel');
+  if (el) { el.textContent = USER_REF_CURRENCY || 'EUR'; }
+}
+
 
 // Mappatura categorie -> icone. Le chiavi sono in minuscolo.
 const categoryIcons = {
@@ -103,13 +108,29 @@ function initApp() {
     categoryFilter.addEventListener('change', () => fetchItems());
     tagFilter.addEventListener('input', () => fetchItems());
 
+    
+    // Toggle avanzato nella modale
+    const toggleAdvancedBtn = document.getElementById('toggleAdvancedBtn');
+    const modalContentEl = document.querySelector('#itemModal .modal-content');
+    const advancedFields = document.querySelector('#itemModal .advanced-fields');
+    toggleAdvancedBtn?.addEventListener('click', () => {
+        modalContentEl?.classList.toggle('expanded');
+        if (advancedFields) {
+            advancedFields.classList.toggle('hidden');
+        }
+        if (modalContentEl?.classList.contains('expanded')) {
+            toggleAdvancedBtn.textContent = 'Nascondi dettagli';
+        } else {
+            toggleAdvancedBtn.textContent = 'Altre informazioni';
+        }
+    });
     // Eventi bottoni
-    addItemBtn.addEventListener('click', () => {
+    addItemBtn?.addEventListener('click', () => {
         clearItemForm();
         modalTitle.textContent = 'Nuovo Item';
         openModal();
     });
-    exportCsvBtn.addEventListener('click', () => {
+    exportCsvBtn?.addEventListener('click', () => {
         const params = new URLSearchParams();
         if (searchInput.value.trim()) params.append('q', searchInput.value.trim());
         if (categoryFilter.value) params.append('category', categoryFilter.value);
@@ -119,7 +140,7 @@ function initApp() {
     // exportPdfBtn?.addEventListener('click', () => {
     //     // Da implementare quando la funzionalità sarà pronta
     // });
-    logoutBtn.addEventListener('click', async () => {
+    logoutBtn?.addEventListener('click', async () => {
         try {
             await fetch('/logout', { method: 'POST' });
         } catch (err) {
@@ -528,6 +549,14 @@ function populateCategories(items) {
 }
 
 function openModal(item = null) {
+    const modalContentEl = document.querySelector('#itemModal .modal-content');
+    const advancedFields = document.querySelector('#itemModal .advanced-fields');
+    if (modalContentEl && modalContentEl.classList.contains('expanded')) { modalContentEl.classList.remove('expanded'); }
+    if (advancedFields && !advancedFields.classList.contains('hidden')) { advancedFields.classList.add('hidden'); }
+    const toggleAdvancedBtn = document.getElementById('toggleAdvancedBtn');
+    if (toggleAdvancedBtn) toggleAdvancedBtn.textContent = 'Altre informazioni';
+    updateRefCurrencyLabel();
+
     const modal = document.getElementById('itemModal');
     const modalTitle = document.getElementById('modalTitle');
     const itemId = document.getElementById('itemId');

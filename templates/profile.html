@@ -6,17 +6,39 @@
     <title>Collector Street - Profilo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
+<body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}" style="-ms-overflow-style: none;">
+    
     <nav>
-        <h1>Collector Street</h1>
-        <div class="actions">
-            <!-- Primary navigation links -->
-            <a href="/home" class="nav-btn">Home</a>
-            <a href="/" class="nav-btn">Collezione</a>
-            <a href="/profile" class="nav-btn">Profilo</a>
-            <button id="logoutBtn">Logout</button>
+        <h1 class="logo-title">Collector Street</h1>
+        <div class="actions icons">
+            <a href="/home" class="icon-btn" title="Home" aria-label="Home">
+                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-10.5z" fill="currentColor"/>
+                </svg>
+            </a>
+            <a href="/" class="icon-btn" title="Collezione" aria-label="Collezione">
+                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                    <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" fill="currentColor"/>
+                </svg>
+            </a>
+            
+            <a href="/profile" class="icon-btn" title="Profilo" aria-label="Profilo">
+                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                    <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z" fill="currentColor"/>
+                </svg>
+            </a>
+        </div>
+        <div class="sub-actions icons">
+            <a href="/api/export/csv" class="icon-btn" id="exportCsvBtnProfile" title="Esporta CSV" aria-label="Esporta CSV"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM12 2l4 4h-3v6h-2V6H8l4-4z" fill="currentColor"/></svg></a>
+            <!-- <button id="logoutBtn" class="icon-btn danger" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M10 17l1.41-1.41L8.83 13H21v-2H8.83l2.58-2.59L10 7l-5 5 5 5zM4 19h7v2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7v2H4z" fill="currentColor"/></svg></button>-->
+            <button id="logoutBtn" class="icon-btn danger" title="Logout" aria-label="Logout">
+                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                    <path d="M10 17l1.41-1.41L8.83 13H21v-2H8.83l2.58-2.59L10 7l-5 5 5 5zM4 19h7v2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7v2H4z" fill="currentColor"/>
+                </svg>
+            </button>
         </div>
     </nav>
+
     <section class="profile-container">
         <h2>Il tuo profilo</h2>
         {% if updated %}
@@ -67,6 +89,13 @@
                         <option value="GBP" {% if user.ref_currency == 'GBP' %}selected{% endif %}>GBP</option>
                         <option value="CNY" {% if user.ref_currency == 'CNY' %}selected{% endif %}>CNY</option>
                     </select>
+                    <label for="theme">Tema dell'app</label>
+                    <select name="theme" id="theme">
+                        <option value="original" {% if (user.theme or 'original') == 'original' %}selected{% endif %}>Originale</option>
+                        <option value="night" {% if user.theme == 'night' %}selected{% endif %}>Notte</option>
+                        <option value="sakura" {% if user.theme == 'sakura' %}selected{% endif %}>Sakura (rosa ciliegio)</option>
+                    </select>
+                    <small>Il tema viene salvato nel profilo. Cambia e premi "Salva modifiche".</small>
                     <label for="profile_image">Immagine profilo</label>
                     <input type="file" name="profile_image" id="profile_image" accept="image/*">
                     <label for="vinted_link">Link Vinted</label>
@@ -265,5 +294,12 @@
             loadUsers();
         }
     </script>
+<script>
+document.getElementById('theme')?.addEventListener('change', (e) => {
+    const t = e.target.value || 'original';
+    document.body.classList.remove('theme-original','theme-night','theme-sakura');
+    document.body.classList.add('theme-' + t);
+});
+</script>
 </body>
 </html>

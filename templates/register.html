@@ -6,7 +6,7 @@
     <title>Collector Street - Registrati</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
-<body>
+<body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}">
     <div class="login-container">
         <h2>Registrati a Collector Street</h2>
         <form id="registerForm">
