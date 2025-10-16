@@ -681,6 +681,8 @@ body.theme-night .modal-content { background:#1f2937; color:#e5e7eb; border-colo
 body.theme-night input, body.theme-night select, body.theme-night textarea { background:#111827; color:#e5e7eb; border-color:#374151; }
 body.theme-night a { color:#22d3ee; }
 body.theme-night .success-msg { background:#064e3b; color:#d1fae5; border-color:#065f46; }
+/* Theme adjustments for new controls */
+body.theme-night .toggle-advanced { background:#1f2937; border-color:#374151; color:#e5e7eb; }
 
 body.theme-sakura { background-color:#fff7fa; color:#4a3848; }
 body.theme-sakura nav { background:#ffffff; border-bottom-color:#ffd6e7; }
@@ -702,3 +704,35 @@ body.theme-sakura .modal-content { background:#ffffff; color:#4a3848; border-col
 body.theme-sakura input, body.theme-sakura select, body.theme-sakura textarea { background:#fff7fa; color:#4a3848; border-color:#ffd6e7; }
 body.theme-sakura a { color:#d75a8a; }
 body.theme-sakura .success-msg { background:#ffe8f1; color:#4a3848; border-color:#ffd6e7; }
+/* Theme adjustments for new controls */
+body.theme-sakura .toggle-advanced { background:#ffffff; border-color:#ffd6e7; color:#d75a8a; }
+
+/* Modal enhanced layout */
+.modal-content .modal-section { display: flex; flex-direction: column; gap: 8px; }
+.modal-content .basic-fields { margin-bottom: 8px; }
+.toggle-advanced {
+    margin: 8px 0;
+    align-self: flex-start;
+    padding: 6px 10px;
+    border: 1px solid #cccccc;
+    background: #ffffff;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.toggle-advanced:hover { background: #e2f2f4; }
+
+.advanced-fields.hidden { display: none; }
+.modal-content.expanded .advanced-fields.hidden { display: flex; }
+
+/* Row for input + suffix/select on the right */
+.field-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.inline-suffix {
+    padding: 6px 10px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    min-width: 48px;
+    text-align: center;
+    background: #f8f9fa;
+}
+
+
