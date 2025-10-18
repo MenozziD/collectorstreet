@@ -141,6 +141,47 @@
     </div>
 </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+<div id="viewItemModal" class="modal hidden">
+  <div class="modal-content view-item">
+    <span class="close" id="viewItemClose">&times;</span>
+
+    <div class="view-header">
+      <h2 id="viewName"></h2>
+      <div id="viewSubtitle" class="subtitle"></div>
+    </div>
+
+    <div class="view-body">
+      <div class="view-media">
+        <img id="viewImage" alt="Foto item">
+      </div>
+
+      <div class="view-grid">
+        <div><span class="label">Categoria</span><span id="viewCategory"></span></div>
+        <div><span class="label">Lingua</span><span id="viewLanguage"></span></div>
+        <div><span class="label">Condizione</span><span id="viewCondition"></span></div>
+        <div class="full"><span class="label">Descrizione</span><span id="viewDescription"></span></div>
+        <div><span class="label">Prezzo acquisto</span><span id="viewPurchase"></span></div>
+        <div><span class="label">Data acquisto</span><span id="viewPurchaseDate"></span></div>
+        <div><span class="label">Prezzo vendita</span><span id="viewSale"></span></div>
+        <div><span class="label">Data vendita</span><span id="viewSaleDate"></span></div>
+        <div class="full"><span class="label">Link marketplace</span>
+          <a id="viewLink" href="#" target="_blank" rel="noopener">Apri annuncio</a>
+        </div>
+        <div class="full"><span class="label">Tag</span><span id="viewTags"></span></div>
+      </div>
+
+      <div class="market-estimate">
+        <div class="est-header">
+          <h3>Stima prezzo a mercato (venduti recenti)</h3>
+          <small id="estSource"></small>
+        </div>
+        <div id="estContent" class="est-content">
+          <em>Nessuna stima disponibile.</em>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

@@ -773,6 +773,24 @@ body.theme-sakura .hint.ok { color: #5cb85c; }
 .hint.warn { color: #f0ad4e; }
 .hint.ok { color: #5cb85c; }
 
-
+/* View Item modal */
+.modal-content.view-item { max-width: 980px; }
+.view-header { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.view-header h2 { margin:0; }
+.subtitle { color:#64748b; font-size:.9rem; }
+.view-body { display:grid; grid-template-columns: 1fr 1.2fr; gap:16px; }
+.view-media { background:#f3f4f6; border:1px solid #e6e6e6; border-radius:10px;
+  display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.view-media img { max-width:100%; max-height:60vh; object-fit:contain; display:block; }
+.view-grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+.view-grid .label { display:block; font-size:.75rem; color:#64748b; }
+.view-grid .full { grid-column: 1 / -1; }
+.market-estimate { grid-column: 1 / -1; background:#f8fafc; border:1px solid #e6e6e6; border-radius:10px; padding:12px; }
+.market-estimate .est-header { display:flex; align-items:baseline; justify-content:space-between; }
+.market-estimate .est-content { margin-top:8px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.market-estimate .pill { display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #e6e6e6; border-radius:999px; padding:6px 10px; }
+.market-estimate .samples { margin-top:8px; font-size:.85rem; color:#64748b; }
+.market-estimate .samples a { color:#008489; }
+@media (max-width: 920px){ .view-body { grid-template-columns: 1fr; } }
 
 

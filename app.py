@@ -4,6 +4,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 import sqlite3
 import csv
 import io
+from dotenv import load_dotenv
 from datetime import datetime, date
 
 
@@ -1073,7 +1074,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.close()
         if not item:
             return jsonify({'error': 'Item not found'}), 404
-        valuation = estimate_valuation(item)
+        valuation = estimate_valuation2(item)
+        # valuation = estimate_valuation(item)
         # Include the item's currency for clarity
         valuation['currency'] = item['currency']
         return jsonify(valuation)
@@ -1406,6 +1408,117 @@ def create_app(db_path: str = "database.db") -> Flask:
             stats = compute_profile_stats(user_dict)
             is_admin = user_dict.get('username') == 'admin'
             return render_template('profile.html', user=user_dict, stats=stats, is_admin=is_admin)
+
+    @app.route('/api/ebay-estimate')
+    @require_login
+    def ebay_estimate():
+        """Stima prezzo a mercato dai venduti recenti su eBay (Finding API)."""
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': 'Item not found'}), 404
+
+        item = dict(row)
+
+        # Costruzione keywords: nome + lingua + categoria + condizione
+        keywords_parts = [item.get('name') or '']
+        if item.get('language'):   keywords_parts.append(item['language'])
+        if item.get('category'):   keywords_parts.append(item['category'])
+        if item.get('condition'):  keywords_parts.append(item['condition'])
+        keywords = " ".join([k for k in keywords_parts if k]).strip() or "collectible"
+
+        import os, requests, statistics
+        EBAY_APP_ID = os.environ.get("EBAY_CLIENT_ID")
+        site_id = os.getenv('EBAY_SITE_ID', '101')  # 101 = Italy, 0 = US
+
+        payload = {
+            'OPERATION-NAME': 'findCompletedItems',
+            'SERVICE-VERSION': '1.13.0',
+            'SECURITY-APPNAME': EBAY_APP_ID or '',
+            'RESPONSE-DATA-FORMAT': 'JSON',
+            'REST-PAYLOAD': 'true',
+            'keywords': keywords,
+            'paginationInput.entriesPerPage': '25',
+            'itemFilter(0).name': 'SoldItemsOnly',
+            'itemFilter(0).value': 'true',
+            'siteid': site_id,
+        }
+        url = 'https://svcs.ebay.com/services/search/FindingService/v1'
+
+        result = {
+            'source': 'eBay Finding API - findCompletedItems',
+            'query': {'url': url, 'params': payload},
+            'stats': None,
+            'samples': []
+        }
+
+        try:
+            if not EBAY_APP_ID:
+                raise RuntimeError('Missing EBAY_APP_ID')
+
+            r = requests.get(url, params=payload, timeout=8)
+            r.raise_for_status()
+            data = r.json()
+
+            items = (((data or {}).get('findCompletedItemsResponse') or [{}])[0]
+                    .get('searchResult') or [{}])[0].get('item', [])
+
+            prices, samples = [], []
+            currency = 'EUR'
+            for it in items:
+                selling = ((it.get('sellingStatus') or [{}])[0])
+                state   = (selling.get('sellingState') or [''])[0]
+                if state != 'EndedWithSales':    # solo effettivamente venduti
+                    continue
+
+                curr_price = ((selling.get('currentPrice') or [{}])[0])
+                price_val  = float(curr_price.get('__value__', '0') or 0)
+                currency   = curr_price.get('@currencyId', currency)
+
+                # Se disponibile, usa il prezzo convertito
+                conv = (selling.get('convertedCurrentPrice') or [{}])[0]
+                if conv and conv.get('__value__'):
+                    price_val = float(conv.get('__value__', price_val) or price_val)
+                    currency  = conv.get('@currencyId', currency)
+
+                title    = (it.get('title') or [''])[0]
+                view_url = (it.get('viewItemURL') or [''])[0]
+                end_time = (((it.get('listingInfo') or [{}])[0]).get('endTime') or [''])[0]
+
+                prices.append(price_val)
+                if len(samples) < 5:
+                    samples.append({'title': title, 'price': price_val, 'currency': currency,
+                                    'url': view_url, 'endTime': end_time})
+
+            if not prices:
+                result['stats'] = {'count': 0}
+            else:
+                avg = sum(prices)/len(prices)
+                med = statistics.median(prices)
+                mn, mx = min(prices), max(prices)
+                result['stats']   = {'count': len(prices), 'avg': round(avg,2), 'median': round(med,2),
+                                    'min': round(mn,2), 'max': round(mx,2), 'currency': currency}
+                result['samples'] = samples
+
+            return jsonify(result), 200
+
+        except Exception:
+            # Fallback se manca la key o non raggiungo eBay:
+            base = float(item.get('purchase_price') or 0) or 50.0
+            est  = base * 1.1
+            result['stats'] = {'count': 0, 'avg': round(est,2), 'median': round(est,2),
+                            'min': round(base*0.9,2), 'max': round(base*1.3,2),
+                            'currency': item.get('currency') or 'EUR', 'stub': True}
+            return jsonify(result)
+
+
 
     return app
 

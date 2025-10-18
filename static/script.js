@@ -97,6 +97,8 @@ function initApp() {
     const modalClose = document.getElementById('modalClose');
     const modalTitle = document.getElementById('modalTitle');
     const itemForm = document.getElementById('itemForm');
+    const viewItemClose = document.getElementById('viewItemClose');
+    const viewItemModal = document.getElementById('viewItemModal');
 
     // Recupera informazioni utente (valuta di riferimento) all'avvio
     fetchUserInfo();
@@ -165,8 +167,12 @@ function initApp() {
     window.addEventListener('click', (event) => {
         if (event.target === modal) {
             closeModal();
+            viewItemModal?.classList.add('hidden');
         }
     });
+
+    viewItemClose?.addEventListener('click', () => viewItemModal?.classList.add('hidden'));
+    
     // Gestione submit del form dell'item (creazione/aggiornamento)
     itemForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -528,6 +534,11 @@ function renderItems(items) {
                 }
             }
         });
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'action-btn';
+        viewBtn.textContent = 'Visualizza';
+        viewBtn.addEventListener('click', () => openViewModal(item));
+        actions.appendChild(viewBtn);
         actions.appendChild(editBtn);
         actions.appendChild(deleteBtn);
         card.appendChild(actions);
@@ -646,6 +657,84 @@ function clearItemForm() {
     if (refInput) refInput.value = '';
 }
 
+function openViewModal(item){
+    const m = document.getElementById('viewItemModal');
+    const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.tagName === 'A') {
+        if (val) { el.href = val; el.textContent = 'Apri annuncio'; el.style.display='inline'; }
+        else      { el.href = '#'; el.textContent = '—'; el.style.display='none'; }
+    } else {
+        el.textContent = val || '—';
+    }
+    };
+
+    document.getElementById('viewName').textContent = item.name || '(senza nome)';
+    document.getElementById('viewSubtitle').textContent = (item.category||'') + (item.language?(' · '+item.language):'');
+    const img = document.getElementById('viewImage');
+    img.src = item.image_path ? `/static/${item.image_path}` : '';
+    img.style.display = item.image_path ? 'block' : 'none';
+
+    set('viewCategory',     item.category);
+    set('viewLanguage',     item.language);
+    set('viewCondition',    item.condition);
+    set('viewDescription',  item.description);
+    set('viewPurchase',     item.purchase_price!=null ? fmtMoney(item.purchase_price, item.currency) : null);
+    set('viewPurchaseDate', item.purchase_date);
+    set('viewSale',         item.sale_price!=null ? fmtMoney(item.sale_price, item.currency) : null);
+    set('viewSaleDate',     item.sale_date);
+    set('viewLink',         item.marketplace_link);
+    set('viewTags',         item.tags);
+
+    // Reset stima e apri
+    document.getElementById('estContent').innerHTML = '<em>Caricamento stima in corso…</em>';
+    document.getElementById('estSource').textContent = '';
+    m.classList.remove('hidden');
+
+  // Chiamata ad eBay
+  fetch(`/api/ebay-estimate?item_id=${item.id}`)
+    .then(r => r.json())
+    .then(data => {
+      const est = document.getElementById('estContent');
+      const src = document.getElementById('estSource');
+
+      if (data && data.query) {
+        const qurl = data.query.url || 'eBay';
+        const params = data.query.params || {};
+        const kw = params.keywords || '';
+        src.textContent = `Fonte: eBay (${qurl}) · Query: "${kw}"`;
+      }
+
+      if (data && data.stats) {
+        const c = data.stats.currency || '';
+        const parts = [];
+        if (data.stats.avg    != null) parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg, c)}</span>`);
+        if (data.stats.median != null) parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median, c)}</span>`);
+        if (data.stats.min    != null && data.stats.max != null) parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min, c)} – ${fmtMoney(data.stats.max, c)}</span>`);
+        parts.push(`<span class="pill"><strong>Campioni</strong> ${(data.stats.count||0)}</span>`);
+        est.innerHTML = parts.join(' ');
+
+        if (data.samples && data.samples.length) {
+          const links = data.samples.map(s => `<a href="${s.url}" target="_blank" rel="noopener">${s.title || 'venduto'}</a>`).join(' · ');
+          const samples = document.createElement('div');
+          samples.className = 'samples';
+          samples.innerHTML = `<div>Esempi recenti: ${links}</div>`;
+          est.appendChild(samples);
+        }
+      } else {
+        est.innerHTML = '<em>Nessuna stima disponibile.</em>';
+      }
+    })
+    .catch(() => {
+      document.getElementById('estContent').innerHTML = '<em>Impossibile recuperare la stima al momento.</em>';
+    });
+}
+const viewItemClose = document.getElementById('viewItemClose');
+const viewItemModal = document.getElementById('viewItemModal');
+viewItemClose?.addEventListener('click', () => viewItemModal?.classList.add('hidden'));
+
+
 // === Inline validation & conversion ===
 function setHint(id, msg, cls='') {
     const el = document.getElementById(id);
@@ -717,3 +806,7 @@ function validateFields() {
     if (link && !/^https?:\/\//i.test(link)) setHint('marketplaceLinkHint','Il link deve iniziare con http:// o https://','warn');
     else setHint('marketplaceLinkHint','', '');
 }
+
+function fmtMoney(v, cur){ if (v==null || isNaN(Number(v))) return '-'; return Number(v).toFixed(2) + (cur?(' '+cur):''); }
+
+
