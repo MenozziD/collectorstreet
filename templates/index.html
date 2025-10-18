@@ -192,7 +192,25 @@
           <em>Nessuna stima disponibile.</em>
         </div>
       </div>
-    </div>
+    
+      <div class="market-estimate">
+        <div class="est-header">
+          <div style="vertical-align: auto; width: 40%;">
+                <h3>Stima prezzo a mercato</h3>
+                <img id="pclogo" src="/static/icons/logo-pricecharting-new.png" width="120px" height="40px" style="margin-top: -14px; padding: 0%;" alt="pricecharting logo">
+            </div>
+            <div style="vertical-align: auto; width: 60%;">
+                <p>Criterio Stima: Prezzi Correnti</p>
+                <small id="pcSource"></small>
+                <br>
+                <small id="pcQuery"></small>
+            </div>
+        </div>
+        <div id="pcContent" class="est-content">
+          <em>Nessuna stima disponibile.</em>
+        </div>
+      </div>
+</div>
   </div>
 </div>
 <script src="{{ url_for('static', filename='script.js') }}"></script>

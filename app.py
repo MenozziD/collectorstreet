@@ -1655,8 +1655,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             result['stats'] = stats
             return jsonify(result), 200
 
-
-    @app.route('/api/ebay/history')
+    @app.route('/api/ebay-history')
     @require_login
     def ebay_history():
         item_id = request.args.get('item_id', type=int)
@@ -1668,6 +1667,55 @@ def create_app(db_path: str = "database.db") -> Flask:
         rows = cur.fetchall(); conn.close()
         return jsonify([dict(r) for r in rows]), 200
 
+    @app.route('/api/pricecharting-estimate')
+    @require_login
+    def pricecharting_estimate():
+        """Estimate from PriceCharting Prices API using /api/product with q.
+        Env: PRICECHARTING_TOKEN or PRICECHARTING_T
+        """
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error':'Missing item_id'}), 400
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone(); conn.close()
+        if not row: return jsonify({'error':'Item not found'}), 404
+        item = dict(row)
+        #parts = [item.get('name').split() or '']
+        #if item.get('category'): parts.append(item['category'])
+        #if item.get('language'): parts.append(item['language'])
+        #if item.get('condition'): parts.append(item['condition'])
+        #q = " ".join([p for p in parts if p]).strip() or "mario"
+        q = " ".join(item.get('name').split()[0:3]) or item.get('name')
+        import os, requests
+        token = os.getenv('PRICECHARTING_TOKEN') or os.getenv('PRICECHARTING_T')
+        url = "https://www.pricecharting.com/api/product"
+        params = {'t': token or '', 'q': q}
+        result = {'source':'PriceCharting Prices API - /api/product','query':{'url':url,'params':{'t':('***' if token else ''),'q':q}},'product':None,'prices':None}
+        try:
+            if not token: raise RuntimeError('Missing PRICECHARTING_TOKEN')
+            r = requests.get(url, params=params, timeout=8); r.raise_for_status(); data = r.json()
+            if data.get('status') != 'success': raise RuntimeError(data.get('error-message') or 'API error')
+            def cents(x):
+                try: return round(int(x)/100.0,2)
+                except: return None
+            product = {'id': data.get('id'), 'product_name': data.get('product-name'), 'console_name': data.get('console-name'), 'upc': data.get('upc')}
+            prices = {
+                'loose': cents(data.get('loose-price')),
+                'cib': cents(data.get('cib-price')),
+                'new': cents(data.get('new-price')),
+                'retail_loose_sell': cents(data.get('retail-loose-sell')),
+                'retail_cib_sell': cents(data.get('retail-cib-sell')),
+                'retail_new_sell': cents(data.get('retail-new-sell')),
+                'currency': 'USD'
+            }
+            result['product'] = product
+            result['prices'] = prices
+            return jsonify(result), 200
+        except Exception as e:
+            base_val = float(item.get('purchase_price') or 0) or None
+            result['prices'] = {'loose': base_val, 'currency': item.get('currency') or 'EUR', 'stub': True}
+            return jsonify(result), 200
 
     return app
 
@@ -1676,5 +1724,3 @@ if __name__ == '__main__':
     # When executed directly, run the app on localhost for development
     app = create_app()
     app.run(host='0.0.0.0', port=5000, debug=True)
-
-

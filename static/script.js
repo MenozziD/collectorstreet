@@ -695,8 +695,8 @@ function openViewModal(item){
     document.getElementById('estSource').textContent = '';
     m.classList.remove('hidden');
 
-  // Chiamata ad eBay
-  fetch(`/api/ebay-estimate?item_id=${item.id}`)
+    // Chiamata ad eBay
+    fetch(`/api/ebay-estimate?item_id=${item.id}`)
     .then(r => r.json())
     .then(data => {
       const est = document.getElementById('estContent');
@@ -733,6 +733,9 @@ function openViewModal(item){
     .catch(() => {
       document.getElementById('estContent').innerHTML = '<em>Impossibile recuperare la stima al momento.</em>';
     });
+    // Chiamata a PriceChart
+    renderPriceChartingSection(item)
+
 }
 const viewItemClose = document.getElementById('viewItemClose');
 const viewItemModal = document.getElementById('viewItemModal');
@@ -841,4 +844,42 @@ function drawHistoryChart(rows){
   // labels
   ctx.fillStyle = '#64748b'; ctx.font = '11px sans-serif';
   ctx.fillText(yMin.toFixed(2), 4, yScale(yMin)); ctx.fillText(yMax.toFixed(2), 4, yScale(yMax));
+}
+
+function renderPriceChartingSection(item){
+  const pc = document.getElementById('pcContent'); const src = document.getElementById('pcSource');
+  const query = document.getElementById('pcQuery');
+  if (pc) pc.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+  fetch(`/api/pricecharting-estimate?item_id=${item.id}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!pc) return;
+      if (data && data.query){
+        const qurl = data.query.url || 'PriceCharting';
+        const params = data.query.params || {};
+        const q = params.q || '';
+        src.textContent = `· Fonte: PriceCharting (${qurl})"`;
+        query.textContent = `· Query: "${q}"`;
+    }
+      if (data && data.prices) {
+        const c = data.prices.currency || '';
+        const parts = [];
+        if (data.product && (data.product.product_name || data.product.console_name)) {
+          const meta = [];
+          if (data.product.product_name) meta.push(data.product.product_name);
+          if (data.product.console_name) meta.push(`(${data.product.console_name})`);
+          parts.push(`<span class="pill"><strong>Prodotto</strong> ${meta.join(' ')}</span>`);
+        }
+        if (data.prices.loose != null) parts.push(`<span class="pill"><strong>Loose</strong> ${fmtMoney(data.prices.loose, c)}</span>`);
+        if (data.prices.cib   != null) parts.push(`<span class="pill"><strong>CIB</strong> ${fmtMoney(data.prices.cib, c)}</span>`);
+        if (data.prices.new   != null) parts.push(`<span class="pill"><strong>New</strong> ${fmtMoney(data.prices.new, c)}</span>`);
+        if (data.prices.retail_loose_sell != null) parts.push(`<span class="pill"><strong>Retail Loose Sell</strong> ${fmtMoney(data.prices.retail_loose_sell, c)}</span>`);
+        if (data.prices.retail_cib_sell   != null) parts.push(`<span class="pill"><strong>Retail CIB Sell</strong> ${fmtMoney(data.prices.retail_cib_sell, c)}</span>`);
+        if (data.prices.retail_new_sell   != null) parts.push(`<span class="pill"><strong>Retail New Sell</strong> ${fmtMoney(data.prices.retail_new_sell, c)}</span>`);
+        pc.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
+      } else {
+        pc.innerHTML = '<em>Nessuna stima disponibile.</em>';
+      }
+    })
+    .catch(() => { if (pc) pc.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
 }
