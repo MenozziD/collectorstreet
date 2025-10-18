@@ -485,7 +485,7 @@ function renderItems(items) {
                 range.innerHTML = `<strong>Range:</strong> ${item.price_p05.toFixed(2)} - ${item.price_p95.toFixed(2)} ${cur}`;
                 card.appendChild(range);
             }
-        }
+        }    
         if (item.marketplace_link) {
             const link = document.createElement('a');
             link.href = item.marketplace_link;
@@ -682,10 +682,12 @@ function openViewModal(item){
     set('viewDescription',  item.description);
     set('viewPurchase',     item.purchase_price!=null ? fmtMoney(item.purchase_price, item.currency) : null);
     set('viewPurchaseDate', item.purchase_date);
+  (function(){ try { if (item.purchase_date) { const d=new Date(item.purchase_date); const now=new Date(); const days=Math.floor((now - d)/(1000*60*60*24)); const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `· ${days} giorni in collezione`; } } catch(e){} })();
     set('viewSale',         item.sale_price!=null ? fmtMoney(item.sale_price, item.currency) : null);
     set('viewSaleDate',     item.sale_date);
     set('viewLink',         item.marketplace_link);
     set('viewTags',         item.tags);
+  (function(){ const el=document.getElementById('viewToken'); if (!el) return; if (item.token) { el.textContent=item.token; el.style.display='inline-flex'; } else { el.textContent=''; el.style.display='none'; } })();
 
     // Reset stima e apri
     document.getElementById('estContent').innerHTML = '<em>Caricamento stima in corso…</em>';
@@ -693,17 +695,18 @@ function openViewModal(item){
     m.classList.remove('hidden');
 
   // Chiamata ad eBay
-  fetch(`/api/ebay-estimate?item_id=${item.id}`)
+  fetch(`/api/ebay-estimate2?item_id=${item.id}`)
     .then(r => r.json())
     .then(data => {
       const est = document.getElementById('estContent');
       const src = document.getElementById('estSource');
-
+      const query = document.getElementById('estQuery');
       if (data && data.query) {
         const qurl = data.query.url || 'eBay';
         const params = data.query.params || {};
         const kw = params.keywords || '';
-        src.textContent = `Fonte: eBay (${qurl}) · Query: "${kw}"`;
+        src.textContent = `· Fonte: eBay (${qurl})"`;
+        query.textContent = `· Query: "${kw}"`;
       }
 
       if (data && data.stats) {
@@ -810,3 +813,31 @@ function validateFields() {
 function fmtMoney(v, cur){ if (v==null || isNaN(Number(v))) return '-'; return Number(v).toFixed(2) + (cur?(' '+cur):''); }
 
 
+
+function drawHistoryChart(rows){
+  const canvas = document.getElementById('estChart'); if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const DPR = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth || 640; const height = canvas.getAttribute('height') ? parseInt(canvas.getAttribute('height'),10) : 160;
+  canvas.width = Math.floor(width * DPR); canvas.height = Math.floor(height * DPR); ctx.scale(DPR, DPR);
+  ctx.clearRect(0,0,width,height);
+  if (!rows || !rows.length) { ctx.fillStyle = '#94a3b8'; ctx.fillText('Nessuno storico disponibile', 10, 20); return; }
+  const xs = rows.map(r => new Date(r.date));
+  const ys = rows.map(r => Number((r.median ?? r.avg) ?? 0));
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const pad = {l:32, r:8, t:8, b:20};
+  const W = width - pad.l - pad.r, H = height - pad.t - pad.b;
+  const minX = xs[0].getTime(), maxX = xs[xs.length-1].getTime();
+  const xScale = d => pad.l + (W * ((d.getTime()-minX)/((maxX-minX) || 1)));
+  const yScale = v => pad.t + H - (H * ((v - yMin)/((yMax - yMin) || 1)));
+  // axes
+  ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t+H); ctx.lineTo(pad.l+W, pad.t+H); ctx.stroke();
+  // line median
+  ctx.strokeStyle = '#0ea5e9'; ctx.lineWidth = 2; ctx.beginPath();
+  ys.forEach((y,i)=>{ const x = xScale(xs[i]); const yy = yScale(y); if(i===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy); }); ctx.stroke();
+  ctx.fillStyle = '#0ea5e9'; ys.forEach((y,i)=>{ const x=xScale(xs[i]); const yy=yScale(y); ctx.beginPath(); ctx.arc(x,yy,2.5,0,Math.PI*2); ctx.fill(); });
+  // labels
+  ctx.fillStyle = '#64748b'; ctx.font = '11px sans-serif';
+  ctx.fillText(yMin.toFixed(2), 4, yScale(yMin)); ctx.fillText(yMax.toFixed(2), 4, yScale(yMax));
+}

@@ -794,3 +794,13 @@ body.theme-sakura .hint.ok { color: #5cb85c; }
 @media (max-width: 920px){ .view-body { grid-template-columns: 1fr; } }
 
 
+
+#estChart { width:100%; display:block; margin-top:8px; background:#fff; border:1px solid #e6e6e6; border-radius:8px; }
+.muted { color:#64748b; margin-left:6px; }
+.tag { display:inline-flex; align-items:center; gap:6px; border:1px solid #e6e6e6; background:#fff; border-radius:999px; padding:3px 8px; font-size:.8rem; color:#475569; }
+body.theme-night #estChart { background:#111827; border-color:#374151; }
+body.theme-night .muted { color:#9ca3af; }
+body.theme-night .tag { background:#111827; border-color:#374151; color:#cbd5e1; }
+body.theme-sakura #estChart { background:#ffffff; border-color:#ffd6e7; }
+body.theme-sakura .muted { color:#4a3848; }
+body.theme-sakura .tag { background:#fff7fa; border-color:#ffd6e7; color:#4a3848; }

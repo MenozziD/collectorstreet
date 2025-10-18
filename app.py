@@ -98,6 +98,26 @@ def create_app(db_path: str = "database.db") -> Flask:
             )
             """
         )
+        # eBay price history per-item (one record per day)
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ebay_price_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                avg REAL,
+                median REAL,
+                min REAL,
+                max REAL,
+                count INTEGER,
+                currency TEXT,
+                keywords TEXT,
+                site_id TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(item_id, date)
+            )
+            """
+        )
         # Attempt to add missing columns for backward compatibility. This ensures that
         # databases created before new fields were introduced continue to work.
         for column, col_type in [
@@ -1518,6 +1538,129 @@ def create_app(db_path: str = "database.db") -> Flask:
                             'currency': item.get('currency') or 'EUR', 'stub': True}
             return jsonify(result)
 
+    @app.route('/api/ebay-estimate2')
+    @require_login
+    def ebay_estimate2():
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'error': 'Item not found'}), 404
+        item = dict(row)
+
+        parts = [item.get('name') or '']
+        if item.get('language'): parts.append(item['language'])
+        if item.get('category'): parts.append(item['category'])
+        if item.get('condition'): parts.append(item['condition'])
+        keywords = " ".join([p for p in parts if p]).strip() or "collectible"
+
+        import requests, statistics, os as _os, datetime as _dt
+        EBAY_APP_ID = os.environ.get("EBAY_CLIENT_ID")
+        site_id = _os.getenv('EBAY_SITE_ID', '101')
+
+        payload = {
+            'OPERATION-NAME': 'findCompletedItems',
+            'SERVICE-VERSION': '1.13.0',
+            'SECURITY-APPNAME': EBAY_APP_ID or '',
+            'RESPONSE-DATA-FORMAT': 'JSON',
+            'REST-PAYLOAD': 'true',
+            'keywords': keywords,
+            'paginationInput.entriesPerPage': '25',
+            'itemFilter(0).name': 'SoldItemsOnly',
+            'itemFilter(0).value': 'true',
+            'siteid': site_id,
+        }
+        url = 'https://svcs.ebay.com/services/search/FindingService/v1'
+        result = {'source':'eBay Finding API - findCompletedItems','query':{'url':url,'params':payload},'stats':None,'samples':[]}
+
+        try:
+            if not EBAY_APP_ID:
+                raise RuntimeError('Missing EBAY_APP_ID')
+            r = requests.get(url, params=payload, timeout=8)
+            r.raise_for_status()
+            data = r.json()
+            items = (((data or {}).get('findCompletedItemsResponse') or [{}])[0].get('searchResult') or [{}])[0].get('item', [])
+            prices, samples = [], []
+            currency = item.get('currency') or 'EUR'
+            for it in items:
+                selling = ((it.get('sellingStatus') or [{}])[0])
+                state   = (selling.get('sellingState') or [''])[0]
+                if state != 'EndedWithSales':
+                    continue
+                curr_price = ((it.get('sellingStatus') or [{}])[0].get('currentPrice') or [{}])[0]
+                price_val  = float(curr_price.get('__value__', '0') or 0)
+                currency   = curr_price.get('@currencyId', currency)
+                conv = ((it.get('sellingStatus') or [{}])[0].get('convertedCurrentPrice') or [{}])[0]
+                if conv and conv.get('__value__'):
+                    price_val = float(conv.get('__value__', price_val) or price_val)
+                    currency  = conv.get('@currencyId', currency)
+                title    = (it.get('title') or [''])[0]
+                view_url = (it.get('viewItemURL') or [''])[0]
+                end_time = (((it.get('listingInfo') or [{}])[0]).get('endTime') or [''])[0]
+                prices.append(price_val)
+                if len(samples) < 5:
+                    samples.append({'title': title, 'price': price_val, 'currency': currency, 'url': view_url, 'endTime': end_time})
+
+            today = _dt.date.today().isoformat()
+
+            if prices:
+                avg = sum(prices)/len(prices)
+                med = statistics.median(prices)
+                mn, mx = min(prices), max(prices)
+                stats = {'count': len(prices), 'avg': round(avg,2), 'median': round(med,2), 'min': round(mn,2), 'max': round(mx,2), 'currency': currency}
+            else:
+                stats = {'count': 0, 'currency': item.get('currency') or 'EUR'}
+
+            cur.execute("""
+                INSERT INTO ebay_price_history (item_id, date, avg, median, min, max, count, currency, keywords, site_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(item_id, date) DO UPDATE SET
+                    avg=excluded.avg, median=excluded.median, min=excluded.min, max=excluded.max,
+                    count=excluded.count, currency=excluded.currency, keywords=excluded.keywords, site_id=excluded.site_id
+            """, (item_id, today, stats.get('avg'), stats.get('median'), stats.get('min'), stats.get('max'),
+                    stats.get('count',0), stats.get('currency'), keywords, str(site_id)))
+            conn.commit()
+
+            result['stats'] = stats
+            result['samples'] = samples
+            conn.close()
+            return jsonify(result), 200
+
+        except Exception:
+            base_val = float(item.get('purchase_price') or 0) or 50.0
+            est = base_val * 1.1
+            today = _dt.date.today().isoformat()
+            stats = {'count': 0, 'avg': round(est,2), 'median': round(est,2), 'min': round(base_val*0.9,2), 'max': round(base_val*1.3,2), 'currency': item.get('currency') or 'EUR', 'stub': True}
+            cur.execute("""
+                INSERT INTO ebay_price_history (item_id, date, avg, median, min, max, count, currency, keywords, site_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(item_id, date) DO UPDATE SET
+                    avg=excluded.avg, median=excluded.median, min=excluded.min, max=excluded.max,
+                    count=excluded.count, currency=excluded.currency, keywords=excluded.keywords, site_id=excluded.site_id
+            """, (item_id, today, stats.get('avg'), stats.get('median'), stats.get('min'), stats.get('max'),
+                    stats.get('count',0), stats.get('currency'), keywords, str(site_id)))
+            conn.commit(); conn.close()
+            result['stats'] = stats
+            return jsonify(result), 200
+
+
+    @app.route('/api/ebay/history')
+    @require_login
+    def ebay_history():
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error':'Missing item_id'}), 400
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT date, avg, median, min, max, count, currency, keywords FROM ebay_price_history WHERE item_id = ? ORDER BY date ASC", (item_id,))
+        rows = cur.fetchall(); conn.close()
+        return jsonify([dict(r) for r in rows]), 200
 
 
     return app
@@ -1527,3 +1670,5 @@ if __name__ == '__main__':
     # When executed directly, run the app on localhost for development
     app = create_app()
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+

@@ -167,13 +167,24 @@
         <div class="full"><span class="label">Link marketplace</span>
           <a id="viewLink" href="#" target="_blank" rel="noopener">Apri annuncio</a>
         </div>
-        <div class="full"><span class="label">Tag</span><span id="viewTags"></span></div>
+        <div class="full">
+            <span class="label">Tag</span>
+            <span id="viewTags"></span>
+        </div>
       </div>
 
       <div class="market-estimate">
         <div class="est-header">
-          <h3>Stima prezzo a mercato (venduti recenti)</h3>
-          <small id="estSource"></small>
+            <div style="vertical-align: auto; width: 40%;">
+                <h3>Stima prezzo a mercato</h3>
+                <img id="ebaylogo" src="/static/icons/ebay_logo.svg" width="100px" height="90px" style="margin-top: -40px; padding: 0%;" alt="eBay logo">
+            </div>
+            <div style="vertical-align: auto; width: 60%;">
+                <p>Criterio Stima: Venduti di recente</p>
+                <small id="estSource"></small>
+                <br>
+                <small id="estQuery"></small>
+            </div>
         </div>
         <div id="estContent" class="est-content">
           <em>Nessuna stima disponibile.</em>
