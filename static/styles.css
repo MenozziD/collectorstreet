@@ -609,6 +609,18 @@ nav .sub-actions.icons {
     gap: 8px;
 }
 
+.icon-btn-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid #dddddd;
+    background: #ffffff;
+    color: #008489;
+    cursor: pointer;
+    text-decoration: none;
+}
+
 .icon-btn {
     display: inline-flex;
     align-items: center;

@@ -754,7 +754,13 @@ def create_app(db_path: str = "database.db") -> Flask:
                 except Exception:
                     roi = None
             # Estimate valuation for this item
-            valuation = estimate_valuation(item)
+            # valuation = estimate_valuation(item)
+            valuation = {
+                'fair_value' : 0,
+                'price_p05': 0,
+                'price_p95': 0,
+                'valuation_date': 0
+            }
             result.append({
                 'id': item['id'],
                 'name': item['name'],
@@ -1429,9 +1435,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             is_admin = user_dict.get('username') == 'admin'
             return render_template('profile.html', user=user_dict, stats=stats, is_admin=is_admin)
 
-    @app.route('/api/ebay-estimate')
+    @app.route('/api/ebay-estimate-old')
     @require_login
-    def ebay_estimate():
+    def ebay_estimate_old():
         """Stima prezzo a mercato dai venduti recenti su eBay (Finding API)."""
         item_id = request.args.get('item_id', type=int)
         if not item_id:
@@ -1538,9 +1544,9 @@ def create_app(db_path: str = "database.db") -> Flask:
                             'currency': item.get('currency') or 'EUR', 'stub': True}
             return jsonify(result)
 
-    @app.route('/api/ebay-estimate2')
+    @app.route('/api/ebay-estimate')
     @require_login
-    def ebay_estimate2():
+    def ebay_estimate():
         item_id = request.args.get('item_id', type=int)
         if not item_id:
             return jsonify({'error': 'Missing item_id'}), 400

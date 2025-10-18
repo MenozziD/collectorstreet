@@ -474,7 +474,7 @@ function renderItems(items) {
             roi.innerHTML = `<strong>ROI:</strong> ${perc}%`;
             card.appendChild(roi);
         }
-        // Valore stimato e range di mercato
+        /* Valore stimato e range di mercato
         if (item.fair_value !== null && item.fair_value !== undefined) {
             const fv = document.createElement('p');
             const cur = item.currency || '';
@@ -485,7 +485,8 @@ function renderItems(items) {
                 range.innerHTML = `<strong>Range:</strong> ${item.price_p05.toFixed(2)} - ${item.price_p95.toFixed(2)} ${cur}`;
                 card.appendChild(range);
             }
-        }    
+        }
+        */    
         if (item.marketplace_link) {
             const link = document.createElement('a');
             link.href = item.marketplace_link;
@@ -695,7 +696,7 @@ function openViewModal(item){
     m.classList.remove('hidden');
 
   // Chiamata ad eBay
-  fetch(`/api/ebay-estimate2?item_id=${item.id}`)
+  fetch(`/api/ebay-estimate?item_id=${item.id}`)
     .then(r => r.json())
     .then(data => {
       const est = document.getElementById('estContent');
