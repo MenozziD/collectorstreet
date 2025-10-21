@@ -660,6 +660,7 @@ function clearItemForm() {
 
 function renderPriceChartingSection(item){
     const logo = document.getElementById('2mLogo');
+    logo.style.backgroundColor = "transparent";
     logo.src = 'https://www.pricecharting.com/images/logo-pricecharting-new.png';
     const src = document.getElementById('2mSource');
     const query = document.getElementById('2mQuery');
@@ -702,6 +703,71 @@ function renderPriceChartingSection(item){
     .catch(() => { if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
 }
 
+function renderJustTCGSection(item){
+  const logo = document.getElementById('2mLogo');
+  logo.style.backgroundColor = "transparent";
+  logo.src = 'https://miro.medium.com/v2/resize:fit:640/format:webp/1*ZPbRrX5X8kQP8x_LDF1Fww.png';  
+  const content = document.getElementById('2mContent');
+  const query = document.getElementById('2mQuery');
+  const src = document.getElementById('2mSource');
+
+  if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+  fetch(`/api/justtcg/estimate?item_id=${item.id}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!content) return;
+      if (data && data.query){
+        const q   = (data.query.params && (data.query.params.q || '')) || '';
+        const g   = (data.query.params && data.query.params.game) ? ` · Gioco: ${data.query.params.game}` : '';
+        src.textContent = `· Fonte: JustTCG (${data.query.url})`;
+        query.textContent = `· Query: "${q}"`;
+        if (data.error) src.textContent += `· Error: ${data.error}`;
+      }
+      const parts = [];
+      if (data.card && (data.card.name || data.card.set_name)){
+        const meta = [];
+        if (data.card.name) meta.push(data.card.name);
+        if (data.card.set_name) meta.push(`(${data.card.set_name})`);
+        if (data.card.number) meta.push(`#${data.card.number}`);
+        parts.push(`<span class="pill"><strong>Carta</strong> ${meta.join(' ')}</span>`);
+      }
+
+      const vars = data.variants || [];
+      const c = 'USD';
+      const pick = (cond, print) => vars.find(v => v.condition === cond && v.printing === print);
+
+      // combo più utili
+      const combos = [
+        ['Near Mint','Normal','NM Normal'],
+        ['Lightly Played','Normal','LP Normal'],
+        ['Near Mint','Foil','NM Foil'],
+        ['Lightly Played','Foil','LP Foil']
+      ];
+      combos.forEach(([cond, print, label])=>{
+        const v = pick(cond, print);
+        if (v && v.price != null) parts.push(`<span class="pill"><strong>${label}</strong> ${fmtMoney(v.price, c)}</span>`);
+      });
+
+      // fallback: mostra qualche variante generica
+      if (!vars.length) {
+        parts.push('<em>Nessuna variante disponibile.</em>');
+      } else if (!parts.some(p => p.includes('NM Normal'))) {
+        vars.slice(0,4).forEach(v=>{
+          if (v.price != null) parts.push(`<span class="pill"><strong>${v.condition||'?'} / ${v.printing||'?'}</strong> ${fmtMoney(v.price,c)}</span>`);
+        });
+      }
+
+      if (data.stats){
+        parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg,c)}</span>`);
+        parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median,c)}</span>`);
+        parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min,c)} – ${fmtMoney(data.stats.max,c)}</span>`);
+        parts.push(`<span class="pill"><strong>Campioni</strong> ${data.stats.count||0}</span>`);
+      }
+
+      content.innerHTML = parts.join(' ') || '<em>Nessuna stima disponibile.</em>';
+    })
+    .catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
 
 function renderPriceLegoSection(item){
     const logo = document.getElementById('2mLogo');
@@ -781,10 +847,10 @@ function renderSecondaryMarketSection(item){
         return renderPriceChartingSection(item);
     if (isLego)
         return renderPriceLegoSection(item);
+    if (isCard)
+        return renderJustTCGSection(item);
     return None
-
 }
-
 
 function openViewModal(item){
     const m = document.getElementById('viewItemModal');

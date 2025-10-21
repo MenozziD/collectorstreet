@@ -603,6 +603,7 @@ nav .logo-title {
 .logo-api
 {
     width: 120px;
+    background-color: transparent;
     height: 40px;
     margin-top: -14px;
     padding: 0%;
