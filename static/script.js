@@ -660,6 +660,7 @@ function clearItemForm() {
 
 function renderPriceChartingSection(item){
     const logo = document.getElementById('2mLogo');
+    logo.src = 'https://www.pricecharting.com/images/logo-pricecharting-new.png';
     const src = document.getElementById('2mSource');
     const query = document.getElementById('2mQuery');
     const content = document.getElementById('2mContent');
@@ -675,7 +676,7 @@ function renderPriceChartingSection(item){
             const q = params.q || '';
             src.textContent = `· Fonte: PriceCharting (${qurl})"`;
             query.textContent = `· Query: "${q}"`;
-            logo.src = '/static/icons/logo-pricecharting-new.png';
+            
         }
         if (data && data.prices) {
         const c = data.prices.currency || '';
@@ -701,8 +702,31 @@ function renderPriceChartingSection(item){
     .catch(() => { if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
 }
 
+
+function renderPriceLegoSection(item){
+    const logo = document.getElementById('2mLogo');
+    logo.src = 'https://rebrickable.com/static/img/title.png?1692235612.579406';
+    const src = document.getElementById('2mSource');
+    const query = document.getElementById('2mQuery');
+    const content = document.getElementById('2mContent');
+    const cat = (item.category || '').toLowerCase();
+
+  fetch(`/api/lego-estimate?item_id=${item.id}`)
+    .then(r=>r.json()).then(data=>{
+      const best = data && data.best;
+      if (best && best.set_number){
+        appendChip('legoSetCodeChip','Codice LEGO', best.set_number, best.url || null);
+      } else if (data && data.inferred){
+        appendChip('legoSetCodeChip','Codice LEGO (stima)', data.inferred, null);
+      }
+    }).catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
 function renderDiscogsSection(item){
     const logo = document.getElementById('2mLogo');
+    logo.src = 'https://www.discogs.com/images/discogs-white.png';
+    logo.style.padding = "2px";
+    logo.style.backgroundColor = "#000000";
     const src = document.getElementById('2mSource');
     const query = document.getElementById('2mQuery');
     const content = document.getElementById('2mContent');
@@ -717,7 +741,6 @@ function renderDiscogsSection(item){
         const psu = data.query.price_suggestions_url ? ` · PriceSuggestions: ${data.query.price_suggestions_url}` : '';
         src.textContent = `· Fonte: Discogs (${qurl})`;
         query.textContent = `· Query: "${q}"${rel}${psu}`;
-        logo.src = '/static/icons/discogs_logo.svg';
         }
         if (data && data.suggestions){
         const parts = [];
@@ -751,13 +774,17 @@ function renderSecondaryMarketSection(item){
     const isVideo = c.includes('videogiochi') || c.includes('videogames') || c.includes('console');
     const isDisc  = c === 'cd' || c.includes(' cd') || c.startswith ? false : false;
     const isVinyl = c.includes('vinyl') || c.includes('vinile') || c.includes('lp');
+    const isLego = c.includes('Lego') || c.includes('lego')
     if (isVinyl || isDisc)
         return renderDiscogsSection(item);
     if (isVideo)
         return renderPriceChartingSection(item);
+    if (isLego)
+        return renderPriceLegoSection(item);
     return None
 
 }
+
 
 function openViewModal(item){
     const m = document.getElementById('viewItemModal');

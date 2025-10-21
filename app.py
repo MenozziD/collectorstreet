@@ -1790,6 +1790,63 @@ def create_app(db_path: str = "database.db") -> Flask:
             result['error'] = str(e)
             return jsonify(result), 200
 
+    @app.route('/api/lego-estimate')
+    @require_login
+    def lego_estimate():
+        import os, re, requests
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone(); conn.close()
+        if not row: return jsonify({'error':'Item not found'}), 404
+        item = dict(row)
+
+        name = (item.get('name') or '').strip()
+        category = (item.get('category') or '').strip().lower()
+
+        # infer numeric code from name if present (3-7 digits)
+        inferred = None
+        m = re.search(r'(?:lego\s*)?(\d{3,7})(?!\d)', name.lower())
+        if m: inferred = m.group(1)
+
+        result = {'source':'Rebrickable API','query':None,'best':None,'results':[],'inferred':inferred}
+        api_key = os.getenv('REBRICKABLE_API_KEY')
+        base_url = 'https://rebrickable.com/api/v3/lego/sets/'
+        params = {'search': name, 'page_size': 10}
+
+        if not api_key:
+            result['query'] = {'url': base_url, 'params': params, 'note':'Missing REBRICKABLE_API_KEY'}
+            if inferred: result['best'] = {'set_num': f'{inferred}-1', 'set_number': inferred, 'name': name, 'source':'inferred'}
+            return jsonify(result), 200
+
+        try:
+            headers = {'Authorization': f'key {api_key}'}
+            r = requests.get(base_url, headers=headers, params=params, timeout=8)
+            r.raise_for_status()
+            data = r.json()
+            items = data.get('results') or []
+            simplified, best = [], None
+            for it in items:
+                set_num = it.get('set_num')
+                set_number = set_num.split('-')[0] if set_num else None
+                entry = {'set_num': set_num, 'set_number': set_number, 'name': it.get('name'),
+                        'year': it.get('year'), 'num_parts': it.get('num_parts'), 'theme_id': it.get('theme_id'),
+                        'img': it.get('set_img_url'), 'url': f"https://rebrickable.com/sets/{set_num}/" if set_num else None}
+                simplified.append(entry)
+                if inferred and set_number == inferred and best is None: best = entry
+            if not best and simplified: best = simplified[0]
+            result['query'] = {'url': base_url, 'params': params}
+            result['results'] = simplified
+            result['best'] = best or ({'set_num': f'{inferred}-1', 'set_number': inferred, 'name': name, 'source':'inferred'} if inferred else None)
+            return jsonify(result), 200
+        except Exception as e:
+            result['query'] = {'url': base_url, 'params': params, 'error': str(e)}
+            if inferred: result['best'] = {'set_num': f'{inferred}-1', 'set_number': inferred, 'name': name, 'source':'inferred'}
+            return jsonify(result), 200
+
+
     return app
 
 

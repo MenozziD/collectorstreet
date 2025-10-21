@@ -600,6 +600,14 @@ nav .logo-title {
     gap: 8px;
 }
 
+.logo-api
+{
+    width: 120px;
+    height: 40px;
+    margin-top: -14px;
+    padding: 0%;
+}
+
 nav .sub-actions.icons {
     display: flex;
     width: 25%;
