@@ -1590,7 +1590,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             if inferred: result['best'] = {'set_num': f'{inferred}-1', 'set_number': inferred, 'name': name, 'source':'inferred'}
             return jsonify(result), 200
 
-    @app.route('/api/justtcg/estimate')
+    @app.route('/api/justtcg-estimate')
     @require_login
     def justtcg_estimate():
         """
@@ -1723,6 +1723,112 @@ def create_app(db_path: str = "database.db") -> Flask:
             result['error'] = str(e)
             return jsonify(result), 200
 
+    @app.route('/api/stockx-estimate')
+    @require_login
+    def stockx_estimate():
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error':'Missing item_id'}), 400
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = conn.fetchone(); conn.close()
+        if not row: return jsonify({'error':'Item not found'}), 404
+        item = dict(row)
+
+        import os, requests, statistics as _st
+        q_parts = [item.get('name') or '']
+        if item.get('brand'): q_parts.append(item['brand'])
+        if item.get('condition'): q_parts.append(item['condition'])
+        q = " ".join([p for p in q_parts if p]).strip()
+
+        def _stats(m):
+            try:
+                vals = [float(v) for k,v in m.items() if k in ('lastSale','lowestAsk','highestBid') and v is not None]
+                if not vals: return None
+                mn, mx = min(vals), max(vals); avg = sum(vals)/len(vals); med = _st.median(vals)
+                return {'count': len(vals), 'avg': round(avg,2), 'median': round(med,2), 'min': round(mn,2), 'max': round(mx,2), 'currency': 'USD'}
+            except: return None
+
+        result = {'source':'StockX Market Data','query':{},'product':None,'market':None,'stats':None}
+
+        # 1) RapidAPI
+        RAPID_KEY = os.getenv('STOCKX_RAPIDAPI_KEY')
+        RAPID_HOST = os.getenv('STOCKX_RAPIDAPI_HOST','stockx-data.p.rapidapi.com')
+        if RAPID_KEY and q:
+            try:
+                h = {'X-RapidAPI-Key': RAPID_KEY, 'X-RapidAPI-Host': RAPID_HOST}
+                s_url = f'https://{RAPID_HOST}/search'; s_params={'query': q}
+                sr = requests.get(s_url, headers=h, params=s_params, timeout=10); sr.raise_for_status(); sjs = sr.json()
+                items = sjs.get('data') or sjs.get('products') or sjs.get('hits') or (sjs if isinstance(sjs, list) else [])
+                if not items: raise RuntimeError('no search result')
+                top = items[0]
+                pid = top.get('id') or top.get('uuid') or top.get('productId') or top.get('_id')
+                urlKey = top.get('urlKey') or top.get('url') or top.get('slug')
+                name = top.get('name') or top.get('title')
+                product = {'id': pid, 'urlKey': urlKey, 'name': name}
+
+                market = None; used_ep=None; used_params=None
+                for ep, params in [('product-details', {'productId': pid} if pid else None), ('product', {'urlKey': urlKey} if urlKey else None)]:
+                    if not params: continue
+                    d_url = f'https://{RAPID_HOST}/{ep}'
+                    dr = requests.get(d_url, headers=h, params=params, timeout=10)
+                    if dr.status_code >= 400: continue
+                    dj = dr.json()
+                    m = dj.get('market') or dj.get('Product') or dj.get('data') or dj
+                    cand = {
+                        'lastSale': m.get('lastSale') if isinstance(m,dict) else None,
+                        'lowestAsk': m.get('lowestAsk') if isinstance(m,dict) else None,
+                        'highestBid': m.get('highestBid') if isinstance(m,dict) else None,
+                        'deadstockSold': m.get('deadstockSold') if isinstance(m,dict) else None,
+                        'volatility': m.get('volatility') if isinstance(m,dict) else None,
+                        'pricePremium': m.get('pricePremium') if isinstance(m,dict) else None,
+                    }
+                    for k in list(cand.keys()):
+                        try: cand[k] = float(cand[k]) if cand[k] is not None else None
+                        except: 
+                            try: cand[k] = float(str(cand[k]).replace('$','').replace(',',''))
+                            except: pass
+                    market = cand; used_ep=ep; used_params=params; break
+
+                if market:
+                    result['query']={'via':'RapidAPI','search':{'url':s_url,'params':s_params},'detail_endpoint':used_ep,'detail_params':used_params}
+                    result['product']=product; result['market']=market; result['stats']=_stats(market) or {'count':0,'currency':'USD'}
+                    return jsonify(result), 200
+            except Exception as e:
+                result['rapidapi_error'] = str(e)
+
+        # 2) Browse best-effort
+        try:
+            if q:
+                headers={'User-Agent':'Mozilla/5.0','Accept':'application/json, text/plain, */*','x-requested-with':'XMLHttpRequest'}
+                s_url='https://stockx.com/api/browse'; s_params={'_search': q}
+                sr=requests.get(s_url, headers=headers, params=s_params, timeout=10); sr.raise_for_status(); sjs=sr.json()
+                prods = sjs.get('Products') or []
+                if prods:
+                    top=prods[0]; urlKey=top.get('urlKey') or top.get('url') or top.get('slug'); name=top.get('title') or top.get('name')
+                    if urlKey:
+                        d_url=f'https://stockx.com/api/products/{urlKey}'; d_params={'includes':'market'}
+                        dr=requests.get(d_url, headers=headers, params=d_params, timeout=10); dr.raise_for_status(); dj=dr.json()
+                        p=dj.get('Product') or {}; market=p.get('market') or {}
+                        cand={'lastSale':market.get('lastSale'),'lowestAsk':market.get('lowestAsk'),'highestBid':market.get('highestBid'),
+                            'deadstockSold':market.get('deadstockSold'),'volatility':market.get('volatility'),'pricePremium':market.get('pricePremium')}
+                        for k in list(cand.keys()):
+                            try: cand[k] = float(cand[k]) if cand[k] is not None else None
+                            except:
+                                try: cand[k] = float(str(cand[k]).replace('$','').replace(',',''))
+                                except: pass
+                        result['query']={'via':'browse','search':{'url':s_url,'params':s_params},'detail':{'url':d_url,'params':d_params}}
+                        result['product']={'urlKey':urlKey,'name':name}; result['market']=cand; result['stats']=_stats(cand) or {'count':0,'currency':'USD'}
+                        return jsonify(result), 200
+        except Exception as e:
+            result['browse_error']=str(e)
+
+        # 3) Fallback
+        base_val = float(item.get('purchase_price') or 0) or None
+        if base_val is not None:
+            market={'lastSale': base_val*1.05, 'lowestAsk': base_val*1.1, 'highestBid': base_val*0.95}
+            result['market']=market; result['stats']=_stats(market)
+        return jsonify(result), 200
 
     return app
 

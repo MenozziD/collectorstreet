@@ -712,7 +712,7 @@ function renderJustTCGSection(item){
   const src = document.getElementById('2mSource');
 
   if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
-  fetch(`/api/justtcg/estimate?item_id=${item.id}`)
+  fetch(`/api/justtcg-estimate?item_id=${item.id}`)
     .then(r => r.json())
     .then(data => {
       if (!content) return;
@@ -834,9 +834,54 @@ function renderDiscogsSection(item){
     }).catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
 }
 
+function renderStockXSection(item){
+    const logo = document.getElementById('2mLogo');
+    logo.src = 'https://upload.wikimedia.org/wikipedia/commons/5/58/StockX_logo.svg';
+    const src = document.getElementById('2mSource');
+    const query = document.getElementById('2mQuery');
+    const content = document.getElementById('2mContent');
+    if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+    fetch(`/api/stockx-estimate?item_id=${item.id}`)
+        .then(r => r.json())
+        .then(data => {
+        if (!content) return;
+        if (data && data.query){
+            let via = data.query.via || 'StockX'; let info = `Fonte: StockX (${via})`;
+            if (data.query.search){ const qp = data.query.search.params || {}; const q = qp.query || qp._search || ''; if (q) info += ` · Query: "${q}"`; }
+            if (data.query.detail_endpoint) info += ` · Endpoint: ${data.query.detail_endpoint}`;
+            if (data.query.detail && data.query.detail.url) info += ` · Detail: ${data.query.detail.url}`;
+            src.textContent = info;
+        }
+        const parts = [];
+        if (data.product && (data.product.name || data.product.urlKey)) {
+            const meta = []; if (data.product.name) meta.push(data.product.name); if (data.product.urlKey) meta.push(`(${data.product.urlKey})`);
+            parts.push(`<span class="pill"><strong>Modello</strong> ${meta.join(' ')}</span>`);
+        }
+        if (data.market){
+            const c = 'USD';
+            if (data.market.lastSale != null)   parts.push(`<span class="pill"><strong>Last Sale</strong> ${fmtMoney(data.market.lastSale, c)}</span>`);
+            if (data.market.lowestAsk != null)  parts.push(`<span class="pill"><strong>Lowest Ask</strong> ${fmtMoney(data.market.lowestAsk, c)}</span>`);
+            if (data.market.highestBid != null) parts.push(`<span class="pill"><strong>Highest Bid</strong> ${fmtMoney(data.market.highestBid, c)}</span>`);
+            if (data.market.deadstockSold != null) parts.push(`<span class="pill"><strong>Sold 12M</strong> ${data.market.deadstockSold}</span>`);
+            if (data.market.volatility != null)    parts.push(`<span class="pill"><strong>Volatility</strong> ${Number(data.market.volatility).toFixed(2)}</span>`);
+            if (data.market.pricePremium != null)  parts.push(`<span class="pill"><strong>Premium</strong> ${Number(data.market.pricePremium).toFixed(2)}%</span>`);
+        }
+        if (data.stats){
+            const c = data.stats.currency || 'USD';
+            parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg, c)}</span>`);
+            parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median, c)}</span>`);
+            parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min, c)} – ${fmtMoney(data.stats.max, c)}</span>`);
+        }
+        content.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
+        })
+        .catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
+
 function renderSecondaryMarketSection(item){
     const c = (item.category || '').toLowerCase();
     const isCard = c.includes('card') || c.includes('tradingcard') || c.includes('cardset');
+    const isShoes = c.includes('shoes') || c.includes('snickers')
     const isVideo = c.includes('videogiochi') || c.includes('videogames') || c.includes('console');
     const isDisc  = c === 'cd' || c.includes(' cd') || c.startswith ? false : false;
     const isVinyl = c.includes('vinyl') || c.includes('vinile') || c.includes('lp');
@@ -849,6 +894,8 @@ function renderSecondaryMarketSection(item){
         return renderPriceLegoSection(item);
     if (isCard)
         return renderJustTCGSection(item);
+    if (isShoes)
+        return renderStockXSection(item);
     return None
 }
 
