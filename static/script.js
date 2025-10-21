@@ -658,6 +658,107 @@ function clearItemForm() {
     if (refInput) refInput.value = '';
 }
 
+function renderPriceChartingSection(item){
+    const logo = document.getElementById('2mLogo');
+    const src = document.getElementById('2mSource');
+    const query = document.getElementById('2mQuery');
+    const content = document.getElementById('2mContent');
+  
+    if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+    fetch(`/api/pricecharting-estimate?item_id=${item.id}`)
+        .then(r => r.json())
+        .then(data => {
+        if (!content) return;
+        if (data && data.query){
+            const qurl = data.query.url || 'PriceCharting';
+            const params = data.query.params || {};
+            const q = params.q || '';
+            src.textContent = `· Fonte: PriceCharting (${qurl})"`;
+            query.textContent = `· Query: "${q}"`;
+            logo.src = '/static/icons/logo-pricecharting-new.png';
+        }
+        if (data && data.prices) {
+        const c = data.prices.currency || '';
+        const parts = [];
+        if (data.product && (data.product.product_name || data.product.console_name)) {
+            const meta = [];
+            if (data.product.product_name) meta.push(data.product.product_name);
+            if (data.product.console_name) meta.push(`(${data.product.console_name})`);
+            parts.push(`<span class="pill"><strong>Prodotto</strong> ${meta.join(' ')}</span>`);
+        }
+        if (data.prices.loose != null) parts.push(`<span class="pill"><strong>Loose</strong> ${fmtMoney(data.prices.loose, c)}</span>`);
+        if (data.prices.cib   != null) parts.push(`<span class="pill"><strong>CIB</strong> ${fmtMoney(data.prices.cib, c)}</span>`);
+        if (data.prices.new   != null) parts.push(`<span class="pill"><strong>New</strong> ${fmtMoney(data.prices.new, c)}</span>`);
+        if (data.prices.retail_loose_sell != null) parts.push(`<span class="pill"><strong>Retail Loose Sell</strong> ${fmtMoney(data.prices.retail_loose_sell, c)}</span>`);
+        if (data.prices.retail_cib_sell   != null) parts.push(`<span class="pill"><strong>Retail CIB Sell</strong> ${fmtMoney(data.prices.retail_cib_sell, c)}</span>`);
+        if (data.prices.retail_new_sell   != null) parts.push(`<span class="pill"><strong>Retail New Sell</strong> ${fmtMoney(data.prices.retail_new_sell, c)}</span>`);
+        content.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
+      } else {
+        const msg = data && data.error ? `Errore PriceCharting: ${data.error}` : 'Nessuna stima disponibile.';
+        content.innerHTML = `<em>${msg}</em>`;
+      }
+    })
+    .catch(() => { if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
+function renderDiscogsSection(item){
+    const logo = document.getElementById('2mLogo');
+    const src = document.getElementById('2mSource');
+    const query = document.getElementById('2mQuery');
+    const content = document.getElementById('2mContent');
+
+    if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+    fetch(`/api/discogs-estimate?item_id=${item.id}`).then(r=>r.json()).then(data=>{
+        if (!content) return;
+        if (data && data.query){
+        const qurl = data.query.url || 'Discogs Search';
+        const qparams = data.query.params || {}; const q = qparams.q || '';
+        const rel = data.query.used_release ? ` · Release #${data.query.used_release.id}` : '';
+        const psu = data.query.price_suggestions_url ? ` · PriceSuggestions: ${data.query.price_suggestions_url}` : '';
+        src.textContent = `· Fonte: Discogs (${qurl})`;
+        query.textContent = `· Query: "${q}"${rel}${psu}`;
+        logo.src = '/static/icons/discogs_logo.svg';
+        }
+        if (data && data.suggestions){
+        const parts = [];
+        if (data.release && (data.release.title || data.release.year)){
+            const meta=[]; if (data.release.title) meta.push(data.release.title); if (data.release.year) meta.push(`(${data.release.year})`);
+            if (data.release.formats && data.release.formats.length) meta.push(`[${data.release.formats.join(', ')}]`);
+            parts.push(`<span class="pill"><strong>Release</strong> ${meta.join(' ')}</span>`);
+        }
+        Object.entries(data.suggestions).forEach(([cond,obj])=>{
+            const val = obj && obj.value!=null ? Number(obj.value) : null;
+            if (val!=null) parts.push(`<span class="pill"><strong>${cond}</strong> ${fmtMoney(val,'USD')}</span>`);
+        });
+        if (data.stats){
+            const c = data.stats.currency || 'USD';
+            parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg,c)}</span>`);
+            parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median,c)}</span>`);
+            parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min,c)} – ${fmtMoney(data.stats.max,c)}</span>`);
+            parts.push(`<span class="pill"><strong>Campioni</strong> ${data.stats.count||0}</span>`);
+        }
+        content.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
+        } else {
+        const msg = data && data.error ? `Errore Discogs: ${data.error}` : 'Nessuna stima disponibile.';
+        content.innerHTML = `<em>${msg}</em>`;
+        }
+    }).catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
+function renderSecondaryMarketSection(item){
+    const c = (item.category || '').toLowerCase();
+    const isCard = c.includes('card') || c.includes('tradingcard') || c.includes('cardset');
+    const isVideo = c.includes('videogiochi') || c.includes('videogames') || c.includes('console');
+    const isDisc  = c === 'cd' || c.includes(' cd') || c.startswith ? false : false;
+    const isVinyl = c.includes('vinyl') || c.includes('vinile') || c.includes('lp');
+    if (isVinyl || isDisc)
+        return renderDiscogsSection(item);
+    if (isVideo)
+        return renderPriceChartingSection(item);
+    return None
+
+}
+
 function openViewModal(item){
     const m = document.getElementById('viewItemModal');
     const set = (id, val) => {
@@ -672,7 +773,7 @@ function openViewModal(item){
     };
 
     document.getElementById('viewName').textContent = item.name || '(senza nome)';
-    document.getElementById('viewSubtitle').textContent = (item.category||'') + (item.language?(' · '+item.language):'');
+    //document.getElementById('viewSubtitle').textContent = (item.category||'') + (item.language?(' · '+item.language):'');
     const img = document.getElementById('viewImage');
     img.src = item.image_path ? `/static/${item.image_path}` : '';
     img.style.display = item.image_path ? 'block' : 'none';
@@ -683,7 +784,7 @@ function openViewModal(item){
     set('viewDescription',  item.description);
     set('viewPurchase',     item.purchase_price!=null ? fmtMoney(item.purchase_price, item.currency) : null);
     set('viewPurchaseDate', item.purchase_date);
-  (function(){ try { if (item.purchase_date) { const d=new Date(item.purchase_date); const now=new Date(); const days=Math.floor((now - d)/(1000*60*60*24)); const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `· ${days} giorni in collezione`; } } catch(e){} })();
+  (function(){ try { if (item.purchase_date) { const d=new Date(item.purchase_date); const now=new Date(); const days=Math.floor((now - d)/(1000*60*60*24)); const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `${days} giorni`; } } catch(e){} })();
     set('viewSale',         item.sale_price!=null ? fmtMoney(item.sale_price, item.currency) : null);
     set('viewSaleDate',     item.sale_date);
     set('viewLink',         item.marketplace_link);
@@ -694,6 +795,8 @@ function openViewModal(item){
     document.getElementById('estContent').innerHTML = '<em>Caricamento stima in corso…</em>';
     document.getElementById('estSource').textContent = '';
     m.classList.remove('hidden');
+    renderChips(item);
+    renderTagPills(item);
 
     // Chiamata ad eBay
     fetch(`/api/ebay-estimate?item_id=${item.id}`)
@@ -733,8 +836,8 @@ function openViewModal(item){
     .catch(() => {
       document.getElementById('estContent').innerHTML = '<em>Impossibile recuperare la stima al momento.</em>';
     });
-    // Chiamata a PriceChart
-    renderPriceChartingSection(item)
+    // Chiamata in base a categoria
+    renderSecondaryMarketSection(item)
 
 }
 const viewItemClose = document.getElementById('viewItemClose');
@@ -846,40 +949,41 @@ function drawHistoryChart(rows){
   ctx.fillText(yMin.toFixed(2), 4, yScale(yMin)); ctx.fillText(yMax.toFixed(2), 4, yScale(yMax));
 }
 
-function renderPriceChartingSection(item){
-  const pc = document.getElementById('pcContent'); const src = document.getElementById('pcSource');
-  const query = document.getElementById('pcQuery');
-  if (pc) pc.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
-  fetch(`/api/pricecharting-estimate?item_id=${item.id}`)
-    .then(r => r.json())
-    .then(data => {
-      if (!pc) return;
-      if (data && data.query){
-        const qurl = data.query.url || 'PriceCharting';
-        const params = data.query.params || {};
-        const q = params.q || '';
-        src.textContent = `· Fonte: PriceCharting (${qurl})"`;
-        query.textContent = `· Query: "${q}"`;
-    }
-      if (data && data.prices) {
-        const c = data.prices.currency || '';
-        const parts = [];
-        if (data.product && (data.product.product_name || data.product.console_name)) {
-          const meta = [];
-          if (data.product.product_name) meta.push(data.product.product_name);
-          if (data.product.console_name) meta.push(`(${data.product.console_name})`);
-          parts.push(`<span class="pill"><strong>Prodotto</strong> ${meta.join(' ')}</span>`);
-        }
-        if (data.prices.loose != null) parts.push(`<span class="pill"><strong>Loose</strong> ${fmtMoney(data.prices.loose, c)}</span>`);
-        if (data.prices.cib   != null) parts.push(`<span class="pill"><strong>CIB</strong> ${fmtMoney(data.prices.cib, c)}</span>`);
-        if (data.prices.new   != null) parts.push(`<span class="pill"><strong>New</strong> ${fmtMoney(data.prices.new, c)}</span>`);
-        if (data.prices.retail_loose_sell != null) parts.push(`<span class="pill"><strong>Retail Loose Sell</strong> ${fmtMoney(data.prices.retail_loose_sell, c)}</span>`);
-        if (data.prices.retail_cib_sell   != null) parts.push(`<span class="pill"><strong>Retail CIB Sell</strong> ${fmtMoney(data.prices.retail_cib_sell, c)}</span>`);
-        if (data.prices.retail_new_sell   != null) parts.push(`<span class="pill"><strong>Retail New Sell</strong> ${fmtMoney(data.prices.retail_new_sell, c)}</span>`);
-        pc.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
-      } else {
-        pc.innerHTML = '<em>Nessuna stima disponibile.</em>';
-      }
-    })
-    .catch(() => { if (pc) pc.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+function renderChips(item){
+  const chips = document.getElementById('viewChips');
+  if (!chips) return;
+  chips.innerHTML = '';
+  const mk = (label, value, icon) => {
+    if (!value) return null;
+    const el = document.createElement('span'); el.className='chip';
+    el.innerHTML = (icon?`<span class="icon">${icon}</span>`:'') + `<strong>${label}</strong> ${value}`;
+    return el;
+  };
+  const icons = {
+    category: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M10 4H4v6h6V4zm10 0h-6v6h6V4zM10 14H4v6h6v-6zm10 0h-6v6h6v-6z"/></svg>',
+    language: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 3l2.2 6H21l-5.6 4 2.2 6L12 15l-5.6 4 2.2-6L3 9h6.8L12 3z"/></svg>',
+    condition:'<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 21l-6-6 1.41-1.41L9 18.17l10.59-10.6L21 9l-12 12z"/></svg>',
+    token:    '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2l4 4-4 4-4-4 4-4zm0 12l4 4-4 4-4-4 4-4z"/></svg>'
+  };
+  const list = [
+    mk('Categoria', item.category, icons.category),
+    mk('Lingua', item.language, icons.language),
+    mk('Condizione', item.condition, icons.condition),
+    mk('Token', item.token, icons.token),
+  ].filter(Boolean);
+  list.forEach(el => chips.appendChild(el));
+}
+
+function renderTagPills(item){
+  const tgt = document.getElementById('viewTagList');
+  if (!tgt) return;
+  tgt.innerHTML = '';
+  const tags = (item.tags || '').split(',').map(s=>s.trim()).filter(Boolean);
+  tags.forEach(t => {
+    const el = document.createElement('span'); el.className='tag-pill'; el.textContent = t;
+    tgt.appendChild(el);
+  });
+  // If we rendered tag pills, hide the legacy Tag row (if present)
+  const legacy = document.querySelector('.hide-when-chips');
+  if (legacy) legacy.style.display = tags.length ? 'none' : '';
 }

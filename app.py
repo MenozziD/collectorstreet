@@ -1717,6 +1717,79 @@ def create_app(db_path: str = "database.db") -> Flask:
             result['prices'] = {'loose': base_val, 'currency': item.get('currency') or 'EUR', 'stub': True}
             return jsonify(result), 200
 
+    @app.route('/api/discogs-estimate')
+    @require_login
+    def discogs_estimate():
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': 'Item not found'}), 404
+        item = dict(row)
+
+        import os, requests, statistics as _st
+        token = os.getenv('DISCOGS_TOKEN')
+        key   = os.getenv('DISCOGS_KEY')
+        sec   = os.getenv('DISCOGS_SECRET')
+        headers = {'User-Agent': os.getenv('DISCOGS_UA', 'CollectorStreet/1.0 (+https://collectorstreet)')}
+
+        q = (item.get('name') or '').strip()
+        cat = (item.get('category') or '').lower()
+        desired_format = None
+        if 'vinyl' in cat or 'vinile' in cat or 'lp' in cat:
+            desired_format = 'Vinyl'
+        elif 'cd' in cat:
+            desired_format = 'CD'
+
+        # Database search
+        base_url = 'https://api.discogs.com/database/search'
+        params = {'q': q, 'type': 'release'}
+        if desired_format: params['format'] = desired_format
+        if token:
+            headers['Authorization'] = f'Discogs token={token}'
+        elif key and sec:
+            params['key'] = key; params['secret'] = sec
+
+        result = {'source':'Discogs Price Suggestions','query':{'url': base_url, 'params': {k: ('***' if k in ('key','secret') else v) for k,v in params.items()}}, 'release':None, 'suggestions':None, 'stats':None}
+        try:
+            rs = requests.get(base_url, params=params, headers=headers, timeout=10)
+            rs.raise_for_status()
+            data = rs.json()
+            rels = data.get('results') or []
+            if not rels:
+                raise RuntimeError('Nessun release trovato')
+            # Prefer those with desired format
+            if desired_format:
+                def has_fmt(r): return desired_format.lower() in [f.lower() for f in (r.get('format') or [])]
+                rels = sorted(rels, key=lambda r: (not has_fmt(r), r.get('year') or 9999))
+            top = rels[0]
+            release_id = top.get('id')
+            result['release'] = {'id': release_id, 'title': top.get('title'), 'year': top.get('year'), 'formats': top.get('format') or []}
+            result['query']['used_release'] = result['release']
+            ps_url = f'https://api.discogs.com/marketplace/price_suggestions/{release_id}'
+            result['query']['price_suggestions_url'] = ps_url
+            # Price suggestions (requires auth - token strongly recommended)
+            ps_headers = dict(headers)
+            if token: ps_headers['Authorization'] = f'Discogs token={token}'
+            pr = requests.get(ps_url, headers=ps_headers, timeout=10)
+            pr.raise_for_status()
+            prices = pr.json()  # condition -> {value}
+            result['suggestions'] = prices
+            vals = [v.get('value') for v in prices.values() if isinstance(v, dict) and v.get('value') is not None]
+            if vals:
+                avg = sum(vals)/len(vals); mn=min(vals); mx=max(vals); med=_st.median(vals)
+                result['stats'] = {'count': len(vals), 'avg': round(avg,2), 'median': round(med,2), 'min': round(mn,2), 'max': round(mx,2), 'currency':'USD'}
+            return jsonify(result), 200
+        except Exception as e:
+            result['error'] = str(e)
+            return jsonify(result), 200
+
     return app
 
 
@@ -1724,3 +1797,6 @@ if __name__ == '__main__':
     # When executed directly, run the app on localhost for development
     app = create_app()
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+
+

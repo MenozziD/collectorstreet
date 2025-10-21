@@ -786,18 +786,20 @@ body.theme-sakura .hint.ok { color: #5cb85c; }
 .hint.ok { color: #5cb85c; }
 
 /* View Item modal */
-.modal-content.view-item { max-width: 980px; }
-.view-header { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.modal-content.view-item { max-width: 900px; }
+.view-header { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom: 10px; }
 .view-header h2 { margin:0; }
 .subtitle { color:#64748b; font-size:.9rem; }
-.view-body { display:grid; grid-template-columns: 1fr 1.2fr; gap:16px; }
+.view-body { display:grid; grid-template-columns: 0.8fr 1.2fr; gap:16px; }
 .view-media { background:#f3f4f6; border:1px solid #e6e6e6; border-radius:10px;
   display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .view-media img { max-width:100%; max-height:60vh; object-fit:contain; display:block; }
 .view-grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
 .view-grid .label { display:block; font-size:.75rem; color:#64748b; }
 .view-grid .full { grid-column: 1 / -1; }
-.market-estimate { grid-column: 1 / -1; background:#f8fafc; border:1px solid #e6e6e6; border-radius:10px; padding:12px; }
+.market-estimate { grid-column: 1 / -1; background:#f8fafc; border:1px solid #e6e6e6; border-radius:10px; padding:20px; }
+.tag-view { grid-column: 1 / -1; background:#f8fafc; border:1px solid #e6e6e6; border-radius:10px; padding:10px; margin-top: -10px; display: block;}
+/*.taglist { display:block; gap: 8px; border: 5px; margin-top: 10px;}*/
 .market-estimate .est-header { display:flex; align-items:baseline; justify-content:space-between; }
 .market-estimate .est-content { margin-top:8px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
 .market-estimate .pill { display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #e6e6e6; border-radius:999px; padding:6px 10px; }
@@ -807,7 +809,7 @@ body.theme-sakura .hint.ok { color: #5cb85c; }
 
 
 
-#estChart { width:100%; display:block; margin-top:8px; background:#fff; border:1px solid #e6e6e6; border-radius:8px; }
+#estChart { width:100%; display:block; margin-top:8px; background:#fff; border:1px solid #e6e6e6; border-radius:20px; }
 .muted { color:#64748b; margin-left:6px; }
 .tag { display:inline-flex; align-items:center; gap:6px; border:1px solid #e6e6e6; background:#fff; border-radius:999px; padding:3px 8px; font-size:.8rem; color:#475569; }
 body.theme-night #estChart { background:#111827; border-color:#374151; }
@@ -816,3 +818,56 @@ body.theme-night .tag { background:#111827; border-color:#374151; color:#cbd5e1;
 body.theme-sakura #estChart { background:#ffffff; border-color:#ffd6e7; }
 body.theme-sakura .muted { color:#4a3848; }
 body.theme-sakura .tag { background:#fff7fa; border-color:#ffd6e7; color:#4a3848; }
+
+/* === Polished View Modal Top === */
+.view-top {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 16px;
+  margin-bottom: 8px;
+  margin-right: 0px;
+}
+.view-media.fixed {
+  background: #f3f4f6;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+  /* Fixed height to keep modal dimension stable */
+  height: 360px;
+  width: 360px;
+}
+.view-media.fixed img {
+  width: 100%; height: 100%; object-fit: contain; display:block;
+}
+.chiplist { display:flex; gap: 8px; border-top: 20px; margin-top: 10px;}
+
+.chip {
+  display:inline-flex; align-items:center; gap:6px;
+  border:1px solid #e6e6e6; background:#fff; color:#334155;
+  border-radius:999px; padding:6px 10px; font-size:.85rem;
+  height: 30px;
+}
+
+ .tag-pill {
+  display:inline-flex; align-items:center; gap:6px;
+  border:1px solid #e6e6e6; background:#fff; color:#334155;
+  border-radius:11px; padding:4px 2px; font-size:.85rem;
+  height: 30px;
+}
+
+.chip .icon { width:14px; height:14px; display:inline-block; }
+.tag-pill { background:#f8fafc; margin: 5px;}
+.hide-when-chips { display:none; }
+
+/* Match themes */
+body.theme-night .view-media.fixed { background:#111827; border-color:#374151; }
+body.theme-night .chip, body.theme-night .tag-pill { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+body.theme-sakura .view-media.fixed { background:#fff7fa; border-color:#ffd6e7; }
+body.theme-sakura .chip, body.theme-sakura .tag-pill { background:#fff; border-color:#ffd6e7; color:#4a3848; }
+
+/* Responsive */
+@media (max-width: 920px){
+  .view-top { grid-template-columns: 1fr; }
+  .view-media.fixed { height: 260px; }
+}

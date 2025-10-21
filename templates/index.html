@@ -149,31 +149,40 @@
 
     <div class="view-header">
       <h2 id="viewName"></h2>
-      <div id="viewSubtitle" class="subtitle"></div>
     </div>
 
     <div class="view-body">
-      <div class="view-media">
-        <img id="viewImage" alt="Foto item">
-      </div>
+        <div class="view-top">
+            <div class="view-media fixed">
+                <img id="viewImage" alt="Foto item">
+            </div>
+        </div>
 
-      <div class="view-grid">
-        <div><span class="label">Categoria</span><span id="viewCategory"></span></div>
-        <div><span class="label">Lingua</span><span id="viewLanguage"></span></div>
-        <div><span class="label">Condizione</span><span id="viewCondition"></span></div>
-        <div class="full"><span class="label">Descrizione</span><span id="viewDescription"></span></div>
-        <div><span class="label">Prezzo acquisto</span><span id="viewPurchase"></span></div>
-        <div><span class="label">Data acquisto</span><span id="viewPurchaseDate"></span></div>
-        <div><span class="label">Prezzo vendita</span><span id="viewSale"></span></div>
-        <div><span class="label">Data vendita</span><span id="viewSaleDate"></span></div>
-        <div class="full"><span class="label">Link marketplace</span>
-          <a id="viewLink" href="#" target="_blank" rel="noopener">Apri annuncio</a>
+        <div class="view-media legacy" style="display:none">
+            <img id="viewImage" alt="Foto item">
         </div>
-        <div class="full">
-            <span class="label">Tag</span>
-            <span id="viewTags"></span>
+
+        <div class="view-grid">
+            <div class="chiplist" id="viewChips"></div>
+            <div class="full" style="border-top: -20px;"><span class="label">Descrizione</span><span id="viewDescription"></span></div>
+            <div style="display: flex; flex-direction: row;" class="full">
+                <div style="width: 30%;"><span class="label" style="border-right: 10px;">Prezzo acquisto</span><span id="viewPurchase"></span></div>
+                <div style="width: 30%;"><span class="label" style="border-right: 10px;">Data acquisto</span><span id="viewPurchaseDate"></span></div>
+                <div><span class="label" style="border-left: 10px;">Giorni in collezione</span><span id="viewDaysInCollection"></span></div>
+            </div>
+            <div style="display: flex; flex-direction: row;" class="full">
+                <div style="width: 30%;"><span class="label">Prezzo vendita</span><span id="viewSale"></span></div>
+                <div style="width: 30%;"><span class="label">Data vendita</span><span id="viewSaleDate"></span></div>
+            </div>
+
+            <div class="full"><span class="label">Link marketplace</span>
+                <a id="viewLink" href="#" target="_blank" rel="noopener">Apri annuncio</a>Apri annuncio
+            </div>
+            <div class="full">
+                <span class="label" style="margin-bottom: 16px;">Tag</span>
+                <div class="tag-view" id="viewTagList"></div>
+            </div>
         </div>
-      </div>
 
       <div class="market-estimate">
         <div class="est-header">
@@ -197,16 +206,16 @@
         <div class="est-header">
           <div style="vertical-align: auto; width: 40%;">
                 <h3>Stima prezzo a mercato</h3>
-                <img id="pclogo" src="/static/icons/logo-pricecharting-new.png" width="120px" height="40px" style="margin-top: -14px; padding: 0%;" alt="pricecharting logo">
+                <img id="2mLogo" src="" width="120px" height="40px" style="margin-top: -14px; padding: 0%;" alt="pricecharting logo">
             </div>
             <div style="vertical-align: auto; width: 60%;">
-                <p>Criterio Stima: Prezzi Correnti</p>
-                <small id="pcSource"></small>
+                <p style="border-bottom: 5px;">Criterio Stima: Prezzi Correnti</p>
+                <small id="2mSource"></small>
                 <br>
-                <small id="pcQuery"></small>
+                <small id="2mQuery"></small>
             </div>
         </div>
-        <div id="pcContent" class="est-content">
+        <div id="2mContent" class="est-content">
           <em>Nessuna stima disponibile.</em>
         </div>
       </div>
