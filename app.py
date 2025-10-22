@@ -6,6 +6,7 @@ import csv
 import io
 from dotenv import load_dotenv
 from datetime import datetime, date
+import json
 
 
 def create_app(db_path: str = "database.db") -> Flask:
@@ -86,6 +87,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 marketplace_link TEXT,
                 tags TEXT,
                 image_path TEXT,
+                market_params TEXT,
                 quantity INTEGER,
                 condition TEXT,
                 currency TEXT,
@@ -127,8 +129,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('condition', 'TEXT'),
             ('currency', 'TEXT'),
             ('language', 'TEXT'),
-            ('purchase_price_curr_ref', 'REAL')
-            ,('fair_value', 'REAL'),
+            ('purchase_price_curr_ref', 'REAL'),
+            ('market_params', 'TEXT'),
+            ('fair_value', 'REAL'),
             ('price_p05', 'REAL'),
             ('price_p95', 'REAL'),
             ('valuation_date', 'TEXT')
@@ -505,12 +508,18 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'price_p95': 0,
                 'valuation_date': 0
             }
+            try:
+                mp = json.loads(item['market_params']) if item['market_params'] else None
+            except Exception:
+                mp = item['market_params']  # se è già dict o è stringa non-JSON
+
             result.append({
                 'id': item['id'],
                 'name': item['name'],
                 'description': item['description'],
                 'language': item['language'],
                 'category': item['category'],
+                'market_params': mp,
                 'purchase_price': item['purchase_price'],
                 'purchase_price_curr_ref': item['purchase_price_curr_ref'],
                 'purchase_date': item['purchase_date'],
@@ -586,9 +595,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             """
             INSERT INTO items (
                 user_id, name, description, category, purchase_price, purchase_price_curr_ref, purchase_date,
-                sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language
+                sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language,market_params
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
@@ -606,7 +615,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 quantity,
                 condition_field,
                 currency,
-                language
+                language,
+                json.dumps(data.get('market_params') if isinstance(data.get('market_params'), dict) else (json.loads(data.get('market_params')) if data.get('market_params') else None))
             )
         )
         conn.commit()
@@ -641,6 +651,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'condition': form.get('condition'),
                 'currency': form.get('currency'),
                 'language': form.get('language'),
+                'market_params': form.get('market_params'),
                 'purchase_price_curr_ref': float(form.get('purchase_price_curr_ref')) if form.get('purchase_price_curr_ref') else None
             }
             # Compute purchase_price_curr_ref automatically if not provided but purchase_price and currency are present
@@ -701,7 +712,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             fields = []
             values = []
             # Build update list from provided fields
-            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language']:
+            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language', 'market_params']:
                 if key in data and data[key] is not None:
                     fields.append(f"{key} = ?")
                     values.append(data[key])

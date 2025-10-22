@@ -58,11 +58,21 @@
                        title="Nome — Il titolo con cui identifichi l'item (obbligatorio).">
                 <textarea id="itemDescription" placeholder="Descrizione"
                           title="Descrizione — Dettagli, note o varianti dell'item."></textarea>
-                <input type="text" id="itemCategory" placeholder="Categoria" required
-                       title="Categoria — Es. 'trading card', 'console', 'action figure', 'videogame'.">
+                <select id="itemCategory" 
+                       title="Categoria — Es. 'trading card', 'console', 'action figure', 'videogame'."
+                       placeholder="Categoria">
+                    <option value="vinyl">Vinyl</option>
+                    <option value="cd">CD</option>
+                    <option value="tradingcard">Trading Card</option>
+                    <option value="shoes">Snickers / Shoes</option>
+                    <option value="actionfigure">Action Figure</option>
+                    <option value="lego">Lego</option>
+                    <option value="console">Console</option>
+                    <option value="videogame">Videogame</option>
+                </select>       
                 <select id="itemLanguage"
-                        title="Lingua — Lingua/edizione dell'item (ITA/ENG/JAP ecc.).">
-                    <option value="">Seleziona lingua</option>
+                        title="Lingua — Lingua/edizione dell'item (ITA/ENG/JAP ecc.)."
+                        placeholder="Lingua">
                     <option value="ITA">ITA</option>
                     <option value="ENG">ENG</option>
                     <option value="JAP">JAP</option>
@@ -136,6 +146,7 @@
                 <h3 class="section-title">Foto</h3>
                 <input type="file" id="image" accept="image/*"
                        title="Immagine — Carica una foto per l'item.">
+                <div id="marketParamsFields"></div>
             </div>
 
             <button type="submit">Salva</button>

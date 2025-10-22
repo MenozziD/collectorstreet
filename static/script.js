@@ -68,6 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (updateStatsBtn) {
         updateStatsBtn.addEventListener('click', updateProfileStats);
     }
+    
+
 });
 
 // Fetch the logged in user's information, including reference currency
@@ -116,8 +118,10 @@ function initApp() {
     const toggleAdvancedBtn = document.getElementById('toggleAdvancedBtn');
     const modalContentEl = document.querySelector('#itemModal .modal-content');
     const advancedFields = document.querySelector('#itemModal .advanced-fields');
-    toggleAdvancedBtn?.addEventListener('click', () => {
+    toggleAdvancedBtn?.addEventListener('click', () => 
+    {
         modalContentEl?.classList.toggle('expanded');
+        renderMarketParamsFields();
         if (advancedFields) {
             advancedFields.classList.toggle('hidden');
         }
@@ -212,6 +216,7 @@ function initApp() {
                 // Prezzo in valuta di riferimento può essere opzionale; aggiungilo comunque
                 const refVal = document.getElementById('purchasePriceRef').value;
                 formData.append('purchase_price_curr_ref', refVal);
+                try{ const mp = collectMarketParams(); if (Object.keys(mp).length) formData.append('market_params', JSON.stringify(mp)); }catch(e){}
                 if (imageInput.files && imageInput.files[0]) {
                     formData.append('image', imageInput.files[0]);
                 }
@@ -239,6 +244,7 @@ function initApp() {
                 // Include prezzo in valuta di riferimento se presente
                 const refValJson = document.getElementById('purchasePriceRef').value;
                 payload.purchase_price_curr_ref = refValJson ? parseFloat(refValJson) : null;
+                const mp = collectMarketParams(); if (Object.keys(mp).length) payload.market_params = mp;
                 res = await fetch('/api/items', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -574,6 +580,7 @@ function populateCategories(items) {
 
 function openModal(item = null) {
     // reset label/hints
+    //hookCategorySelect();
     updateRefCurrencyLabel();
     setHint('purchasePriceHint',''); setHint('purchaseDateHint',''); setHint('purchasePriceRefHint',''); setHint('salePriceHint',''); setHint('saleDateHint',''); setHint('quantityHint',''); setHint('marketplaceLinkHint','');
     const modalContentEl = document.querySelector('#itemModal .modal-content');
@@ -602,6 +609,7 @@ function openModal(item = null) {
     const imageInput = document.getElementById('image');
     const currencySelect = document.getElementById('currency');
     const purchasePriceRef = document.getElementById('purchasePriceRef');
+    
     if (item) {
         modalTitle.textContent = 'Modifica Item';
         itemId.value = item.id;
@@ -609,6 +617,11 @@ function openModal(item = null) {
         itemDescription.value = item.description || '';
         itemLanguage.value = item.language || '';
         itemCategory.value = item.category || '';
+        if (item && item.market_params) {
+            renderMarketParamsFields(item.market_params);
+        } else {
+            renderMarketParamsFields({});
+        }
         purchasePrice.value = item.purchase_price !== null && item.purchase_price !== undefined ? item.purchase_price : '';
         purchaseDate.value = item.purchase_date || '';
         salePrice.value = item.sale_price !== null && item.sale_price !== undefined ? item.sale_price : '';
@@ -631,6 +644,10 @@ function openModal(item = null) {
         if (purchasePriceRef) purchasePriceRef.value = '';
     }
     modal.classList.remove('hidden');
+    
+    document.getElementById('itemCategory')?.addEventListener('change', () => {
+        renderMarketParamsFields(collectMarketParams());
+    });
 }
 
 function closeModal() {
@@ -877,7 +894,6 @@ function renderStockXSection(item){
         .catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
 }
 
-
 function renderSecondaryMarketSection(item){
     const c = (item.category || '').toLowerCase();
     const isCard = c.includes('card') || c.includes('tradingcard') || c.includes('cardset');
@@ -979,11 +995,10 @@ function openViewModal(item){
     // Chiamata in base a categoria
     renderSecondaryMarketSection(item)
 
+    const viewItemClose = document.getElementById('viewItemClose');
+    const viewItemModal = document.getElementById('viewItemModal');
+    viewItemClose?.addEventListener('click', () => viewItemModal?.classList.add('hidden'));
 }
-const viewItemClose = document.getElementById('viewItemClose');
-const viewItemModal = document.getElementById('viewItemModal');
-viewItemClose?.addEventListener('click', () => viewItemModal?.classList.add('hidden'));
-
 
 // === Inline validation & conversion ===
 function setHint(id, msg, cls='') {
@@ -1127,3 +1142,129 @@ function renderTagPills(item){
   const legacy = document.querySelector('.hide-when-chips');
   if (legacy) legacy.style.display = tags.length ? 'none' : '';
 }
+
+// Schema dei parametri per categoria
+const MARKET_HINTS_SCHEMA = {
+  'tradingcard': [
+    {key:'game', label:'Gioco', placeholder:'es. Pokémon / MTG', tip:'Gioco TCG (pokemon, mtg, yugioh, ...)' },
+    {key:'set_name', label:'Set', placeholder:'es. Base Set', tip:'Nome set/espansione' },
+    {key:'number', label:'Numero', placeholder:'es. 4/102', tip:'Numero carta' },
+    {key:'language', label:'Lingua', placeholder:'es. ITA/ENG/JP', tip:'Lingua' },
+    {key:'printing', label:'Finitura', placeholder:'Normal / Foil', tip:'Normal / Foil / 1st Edition / Unlimited' },
+    {key:'tcgplayer_id', label:'TCGplayer ID', placeholder:'es. 123456', tip:'ID diretto per lookup preciso' }
+  ],
+  'videogame': [
+    {key:'platform', label:'Piattaforma', placeholder:'es. PS2, SNES', tip:'Piattaforma/console' },
+    {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' },
+    {key:'edition', label:'Edizione', placeholder:'Standard / Limited', tip:'Edizione o variant' },
+    {key:'pricecharting_id', label:'PriceCharting ID', placeholder:'es. 12345', tip:'ID diretto se noto' }
+  ],
+  'console': [
+    {key:'platform', label:'Piattaforma', placeholder:'es. Nintendo Switch', tip:'Console piattaforma' },
+    {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' }
+  ],
+  'sneakers': [
+    {key:'brand', label:'Brand', placeholder:'Nike / Adidas', tip:'Marca' },
+    {key:'model', label:'Modello', placeholder:'es. Dunk Low', tip:'Modello' },
+    {key:'colorway', label:'Colorway', placeholder:'es. Panda', tip:'Colorway' },
+    {key:'sku', label:'SKU', placeholder:'es. DD1391-100', tip:'Codice prodotto' },
+    {key:'size', label:'Taglia', placeholder:'US 9 / EU 42.5', tip:'Taglia' },
+    {key:'stockx_url_key', label:'StockX URL Key', placeholder:'es. nike-dunk-low-retro-white-black', tip:'Slug univoco' }
+  ],
+  'vinyl': [
+    {key:'artist', label:'Artista', placeholder:'es. Pink Floyd', tip:'Artista' },
+    {key:'album', label:'Album', placeholder:'es. The Dark Side...', tip:'Titolo' },
+    {key:'year', label:'Anno', placeholder:'es. 1973', tip:'Anno uscita' },
+    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 1234567', tip:'ID release Discogs' }
+  ],
+  'cd': [
+    {key:'artist', label:'Artista', placeholder:'es. Daft Punk', tip:'Artista' },
+    {key:'album', label:'Album', placeholder:'es. Discovery', tip:'Titolo' },
+    {key:'year', label:'Anno', placeholder:'es. 2001', tip:'Anno uscita' },
+    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 7654321', tip:'ID release Discogs' }
+  ],
+  'lego': [
+    {key:'set_number', label:'Set Number', placeholder:'es. 75336', tip:'Codice set LEGO' },
+    {key:'theme', label:'Tema', placeholder:'es. Star Wars', tip:'Tema' },
+    {key:'year', label:'Anno', placeholder:'es. 2022', tip:'Anno uscita' }
+  ],
+  'default': [
+    {key:'brand', label:'Brand', placeholder:'', tip:'Marca' },
+    {key:'model', label:'Modello', placeholder:'', tip:'Modello' }
+  ]
+};
+
+
+
+function renderMarketParamsFields(existing){
+  const wrap = document.getElementById('marketParamsFields');
+  if (!wrap) return;
+
+  const catRaw = document.getElementById('itemCategory')?.value || '';
+  const catKey = normalizeCategory(catRaw);
+  const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
+
+  // Valori esistenti (object) se passati o presi dai campi attuali
+  const existingObj = existing ? parseMarketParams(existing) : collectMarketParams();
+
+  wrap.innerHTML = '';
+  schema.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'field';
+
+    const inputId = 'mp_' + f.key;
+    const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
+
+    const label = document.createElement('label');
+    label.htmlFor = inputId;
+    label.title = f.tip || '';
+    label.textContent = f.label;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = inputId;
+    input.placeholder = f.placeholder || '';
+    input.value = val || '';
+
+    div.append(label, input);
+    wrap.appendChild(div);
+  });
+}
+
+function collectMarketParams(){
+  const catKey = normalizeCategory(document.getElementById('itemCategory').value);
+  const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
+  const obj = {};
+  schema.forEach(f => {
+    const el = document.getElementById('mp_' + f.key);
+    if (el && el.value && el.value.trim() !== '') obj[f.key] = el.value.trim();
+  });
+  return obj;
+}
+
+function parseMarketParams(mp){
+  try {
+    if (!mp) return {};
+    if (typeof mp === 'string') return JSON.parse(mp);
+    if (typeof mp === 'object') return mp;
+  } catch(e){}
+  return {};
+}
+
+const CATEGORY_ALIASES = {
+  'snickers': 'sneakers',
+  'shoes': 'sneakers',
+  'vynil': 'vinyl',
+  'videogames': 'videogame',
+  'tradingcards': 'tradingcard'
+};
+
+function normalizeCategory(cat){
+  const k = (cat || '').toLowerCase().trim();
+  if (MARKET_HINTS_SCHEMA[k]) return k;
+  if (CATEGORY_ALIASES[k] && MARKET_HINTS_SCHEMA[CATEGORY_ALIASES[k]]) {
+    return CATEGORY_ALIASES[k];
+  }
+  return 'default';
+}
+
