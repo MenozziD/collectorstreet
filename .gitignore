@@ -18,6 +18,7 @@ node_modules/
 
 # Environment files
 .env
+.temp
 
 # Miscellaneous system files
 .DS_Store
