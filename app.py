@@ -4,7 +4,9 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 import sqlite3
 import csv
 import io
+from dotenv import load_dotenv
 from datetime import datetime, date
+import json
 
 
 def create_app(db_path: str = "database.db") -> Flask:
@@ -85,6 +87,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 marketplace_link TEXT,
                 tags TEXT,
                 image_path TEXT,
+                market_params TEXT,
                 quantity INTEGER,
                 condition TEXT,
                 currency TEXT,
@@ -97,6 +100,26 @@ def create_app(db_path: str = "database.db") -> Flask:
             )
             """
         )
+        # eBay price history per-item (one record per day)
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ebay_price_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                avg REAL,
+                median REAL,
+                min REAL,
+                max REAL,
+                count INTEGER,
+                currency TEXT,
+                keywords TEXT,
+                site_id TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(item_id, date)
+            )
+            """
+        )
         # Attempt to add missing columns for backward compatibility. This ensures that
         # databases created before new fields were introduced continue to work.
         for column, col_type in [
@@ -106,8 +129,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('condition', 'TEXT'),
             ('currency', 'TEXT'),
             ('language', 'TEXT'),
-            ('purchase_price_curr_ref', 'REAL')
-            ,('fair_value', 'REAL'),
+            ('purchase_price_curr_ref', 'REAL'),
+            ('market_params', 'TEXT'),
+            ('fair_value', 'REAL'),
             ('price_p05', 'REAL'),
             ('price_p95', 'REAL'),
             ('valuation_date', 'TEXT')
@@ -140,263 +164,7 @@ def create_app(db_path: str = "database.db") -> Flask:
     app.config['UPLOAD_FOLDER'] = upload_folder
     # Initialize database on app creation
     init_db()
-
-    # ----------------------------------------------------------------------
-    # TCGPlayer API integration
-    #
-    # To enable fetching market prices for trading cards, set the environment
-    # variables TCGPLAYER_PUBLIC_KEY and TCGPLAYER_PRIVATE_KEY with your
-    # developer credentials. The API requires obtaining an access token via
-    # client credentials and then using the catalog and pricing endpoints.
-    # See https://docs.tcgplayer.com/docs/getting-started for details.
-    tcgplayer_public_key = os.environ.get('TCGPLAYER_PUBLIC_KEY')
-    tcgplayer_private_key = os.environ.get('TCGPLAYER_PRIVATE_KEY')
-    # Token cache to avoid requesting a new token on every call
-    token_cache = {'token': None, 'expires_at': 0}
-
-    def get_tcgplayer_token() -> str | None:
-        """
-        Obtain an OAuth token from TCGPlayer. Caches the token until expiry.
-
-        Returns:
-            str or None: Bearer token string if credentials are configured and token retrieval succeeds, else None.
-        """
-        import base64
-        import time
-        if not tcgplayer_public_key or not tcgplayer_private_key:
-            return None
-        # Return cached token if still valid
-        if token_cache['token'] and token_cache['expires_at'] > time.time() + 60:
-            return token_cache['token']
-        # Compose basic auth header
-        creds = f"{tcgplayer_public_key}:{tcgplayer_private_key}"
-        b64_creds = base64.b64encode(creds.encode('utf-8')).decode('utf-8')
-        headers = {
-            'Authorization': f"Basic {b64_creds}",
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-        data = {'grant_type': 'client_credentials'}
-        try:
-            resp = requests.post('https://api.tcgplayer.com/token', headers=headers, data=data, timeout=10)
-            if resp.status_code != 200:
-                return None
-            token_json = resp.json()
-            access_token = token_json.get('access_token')
-            expires_in = token_json.get('expires_in', 0)
-            if access_token:
-                token_cache['token'] = access_token
-                token_cache['expires_at'] = time.time() + int(expires_in)
-                return access_token
-        except Exception:
-            return None
-        return None
-
-    def get_tcgplayer_market_price(item_name: str) -> float | None:
-        """
-        Query TCGPlayer for market price of a card given its name. This function
-        searches for the product by name and retrieves the market price from
-        pricing endpoints. Requires valid API credentials.
-
-        Args:
-            item_name (str): Name of the card to search.
-
-        Returns:
-            float or None: Market price in USD if available; otherwise None.
-        """
-        # Without credentials, skip API call
-        token = get_tcgplayer_token()
-        if not token:
-            return None
-        # Search for the product
-        try:
-            search_headers = {'Authorization': f"Bearer {token}"}
-            params = {'productName': item_name, 'limit': 1, 'getExtendedFields': 'true'}
-            search_resp = requests.get('https://api.tcgplayer.com/catalog/products', headers=search_headers, params=params, timeout=10)
-            if search_resp.status_code != 200:
-                return None
-            search_data = search_resp.json()
-            results = search_data.get('results') or []
-            if not results:
-                return None
-            product = results[0]
-            product_id = product.get('productId')
-            if not product_id:
-                return None
-            # Fetch pricing for this product
-            price_resp = requests.get(f'https://api.tcgplayer.com/pricing/product/{product_id}', headers=search_headers, timeout=10)
-            if price_resp.status_code != 200:
-                return None
-            price_data = price_resp.json()
-            prices = price_data.get('results') or []
-            # The pricing results may include multiple entries; take the marketPrice of the first if present
-            for p in prices:
-                market = p.get('marketPrice')
-                if market is not None:
-                    try:
-                        return float(market)
-                    except Exception:
-                        continue
-            return None
-        except Exception:
-            return None
-
-    # ----------------------------------------------------------------------
-    # eBay API integration
-    #
-    # These functions allow fetching price data from eBay's Browse API. To use
-    # them, set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET environment variables.
-    # The API uses OAuth2.0 to obtain an access token. Rate limits apply.
-    ebay_client_id = os.environ.get('EBAY_CLIENT_ID')
-    ebay_client_secret = os.environ.get('EBAY_CLIENT_SECRET')
-    ebay_token_cache = {'token': None, 'expires_at': 0}
-
-    def get_ebay_token() -> str | None:
-        """Obtain an OAuth2 bearer token from eBay using client credentials."""
-        import time
-        import base64
-        if not ebay_client_id or not ebay_client_secret:
-            return None
-        # Return cached token if still valid
-        if ebay_token_cache['token'] and ebay_token_cache['expires_at'] > time.time() + 60:
-            return ebay_token_cache['token']
-        creds = f"{ebay_client_id}:{ebay_client_secret}"
-        b64_creds = base64.b64encode(creds.encode('utf-8')).decode('utf-8')
-        headers = {
-            'Authorization': f"Basic {b64_creds}",
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-        data = {'grant_type': 'client_credentials', 'scope': 'https://api.ebay.com/oauth/api_scope/buy.browse'}
-        try:
-            resp = requests.post('https://api.ebay.com/identity/v1/oauth2/token', headers=headers, data=data, timeout=10)
-            if resp.status_code != 200:
-                return None
-            json_resp = resp.json()
-            token = json_resp.get('access_token')
-            expires_in = json_resp.get('expires_in', 0)
-            if token:
-                ebay_token_cache['token'] = token
-                ebay_token_cache['expires_at'] = time.time() + int(expires_in)
-                return token
-        except Exception:
-            return None
-        return None
-
-    def get_ebay_market_price(item_name: str) -> float | None:
-        """
-        Search eBay for the given item and return an approximate market price in
-        the item's listed currency. Uses the Browse API search endpoint.
-        """
-        token = get_ebay_token()
-        if not token:
-            return None
-        headers = {
-            'Authorization': f"Bearer {token}",
-            'Content-Type': 'application/json'
-        }
-        params = {
-            'q': item_name,
-            'limit': 10,
-            # filter: sold items only or buyNow available, etc.
-            # we do not restrict to sold items because we want current listings
-        }
-        try:
-            resp = requests.get('https://api.ebay.com/buy/browse/v1/item_summary/search', headers=headers, params=params, timeout=10)
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            summaries = data.get('itemSummaries') or []
-            # Extract prices; choose median of first few items
-            prices = []
-            for s in summaries:
-                price_info = s.get('price')
-                if price_info and price_info.get('value') is not None:
-                    try:
-                        prices.append(float(price_info['value']))
-                    except Exception:
-                        pass
-            if not prices:
-                return None
-            # Return median of collected prices
-            prices.sort()
-            mid = len(prices) // 2
-            return prices[mid]
-        except Exception:
-            return None
-
-    # ----------------------------------------------------------------------
-    # PriceCharting API integration
-    #
-    # PriceCharting offers an API for video game prices. To use it, set
-    # PRICECHARTING_TOKEN in your environment. Note that this API is rate limited.
-    pricecharting_token = os.environ.get('PRICECHARTING_TOKEN')
-
-    def get_pricecharting_market_price(item_name: str) -> float | None:
-        """
-        Query PriceCharting for a given item and return its loose price in USD.
-        Requires a valid API token via PRICECHARTING_TOKEN.
-        """
-        if not pricecharting_token:
-            return None
-        try:
-            # Search for the product by name
-            search_params = {'t': pricecharting_token, 'q': item_name}
-            resp = requests.get('https://www.pricecharting.com/api/search', params=search_params, timeout=10)
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            products = data.get('products') or []
-            if not products:
-                return None
-            product = products[0]
-            product_id = product.get('product_id') or product.get('productId')
-            if not product_id:
-                return None
-            # Fetch product details to get price
-            detail_params = {'t': pricecharting_token, 'id': product_id}
-            detail_resp = requests.get('https://www.pricecharting.com/api/product', params=detail_params, timeout=10)
-            if detail_resp.status_code != 200:
-                return None
-            detail = detail_resp.json()
-            # Choose loose price if available; otherwise use new price
-            loose_price = detail.get('loose_price') or detail.get('lowest_price')
-            if loose_price:
-                return float(loose_price)
-            return None
-        except Exception:
-            return None
-
-    # ----------------------------------------------------------------------
-    # JustTCG (or similar) API integration
-    #
-    # JustTCG provides pricing data for various trading card games. You must
-    # obtain an API key and set JUSTTCG_API_KEY. See justtcg.com for docs.
-    justtcg_api_key = os.environ.get('JUSTTCG_API_KEY')
-
-    def get_justtcg_market_price(item_name: str) -> float | None:
-        """
-        Query JustTCG for the market price of a trading card. Returns price in USD.
-        Requires a valid API key via JUSTTCG_API_KEY.
-        """
-        if not justtcg_api_key:
-            return None
-        try:
-            headers = {'Authorization': f"Bearer {justtcg_api_key}"}
-            params = {'q': item_name, 'limit': 1}
-            resp = requests.get('https://api.justtcg.com/v1/prices', headers=headers, params=params, timeout=10)
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            results = data.get('results') or []
-            if not results:
-                return None
-            price_info = results[0]
-            price = price_info.get('price') or price_info.get('marketPrice')
-            if price:
-                return float(price)
-            return None
-        except Exception:
-            return None
-
+  
 
     def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
         """
@@ -733,13 +501,25 @@ def create_app(db_path: str = "database.db") -> Flask:
                 except Exception:
                     roi = None
             # Estimate valuation for this item
-            valuation = estimate_valuation(item)
+            # valuation = estimate_valuation(item)
+            valuation = {
+                'fair_value' : 0,
+                'price_p05': 0,
+                'price_p95': 0,
+                'valuation_date': 0
+            }
+            try:
+                mp = json.loads(item['market_params']) if item['market_params'] else None
+            except Exception:
+                mp = item['market_params']  # se è già dict o è stringa non-JSON
+
             result.append({
                 'id': item['id'],
                 'name': item['name'],
                 'description': item['description'],
                 'language': item['language'],
                 'category': item['category'],
+                'market_params': mp,
                 'purchase_price': item['purchase_price'],
                 'purchase_price_curr_ref': item['purchase_price_curr_ref'],
                 'purchase_date': item['purchase_date'],
@@ -815,9 +595,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             """
             INSERT INTO items (
                 user_id, name, description, category, purchase_price, purchase_price_curr_ref, purchase_date,
-                sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language
+                sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language,market_params
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
@@ -835,7 +615,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 quantity,
                 condition_field,
                 currency,
-                language
+                language,
+                json.dumps(data.get('market_params') if isinstance(data.get('market_params'), dict) else (json.loads(data.get('market_params')) if data.get('market_params') else None))
             )
         )
         conn.commit()
@@ -870,6 +651,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'condition': form.get('condition'),
                 'currency': form.get('currency'),
                 'language': form.get('language'),
+                'market_params': form.get('market_params'),
                 'purchase_price_curr_ref': float(form.get('purchase_price_curr_ref')) if form.get('purchase_price_curr_ref') else None
             }
             # Compute purchase_price_curr_ref automatically if not provided but purchase_price and currency are present
@@ -930,7 +712,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             fields = []
             values = []
             # Build update list from provided fields
-            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language']:
+            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language', 'market_params']:
                 if key in data and data[key] is not None:
                     fields.append(f"{key} = ?")
                     values.append(data[key])
@@ -1073,7 +855,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.close()
         if not item:
             return jsonify({'error': 'Item not found'}), 404
-        valuation = estimate_valuation(item)
+        valuation = estimate_valuation2(item)
+        # valuation = estimate_valuation(item)
         # Include the item's currency for clarity
         valuation['currency'] = item['currency']
         return jsonify(valuation)
@@ -1407,6 +1190,845 @@ def create_app(db_path: str = "database.db") -> Flask:
             is_admin = user_dict.get('username') == 'admin'
             return render_template('profile.html', user=user_dict, stats=stats, is_admin=is_admin)
 
+    @app.route('/api/ebay-estimate-old')
+    @require_login
+    def ebay_estimate_old():
+        """Stima prezzo a mercato dai venduti recenti su eBay (Finding API)."""
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': 'Item not found'}), 404
+
+        item = dict(row)
+
+        # Costruzione keywords: nome + lingua + categoria + condizione
+        keywords_parts = [item.get('name') or '']
+        if item.get('language'):   keywords_parts.append(item['language'])
+        if item.get('category'):   keywords_parts.append(item['category'])
+        if item.get('condition'):  keywords_parts.append(item['condition'])
+        keywords = " ".join([k for k in keywords_parts if k]).strip() or "collectible"
+
+        import os, requests, statistics
+        EBAY_APP_ID = os.environ.get("EBAY_CLIENT_ID")
+        site_id = os.getenv('EBAY_SITE_ID', '101')  # 101 = Italy, 0 = US
+
+        payload = {
+            'OPERATION-NAME': 'findCompletedItems',
+            'SERVICE-VERSION': '1.13.0',
+            'SECURITY-APPNAME': EBAY_APP_ID or '',
+            'RESPONSE-DATA-FORMAT': 'JSON',
+            'REST-PAYLOAD': 'true',
+            'keywords': keywords,
+            'paginationInput.entriesPerPage': '25',
+            'itemFilter(0).name': 'SoldItemsOnly',
+            'itemFilter(0).value': 'true',
+            'siteid': site_id,
+        }
+        url = 'https://svcs.ebay.com/services/search/FindingService/v1'
+
+        result = {
+            'source': 'eBay Finding API - findCompletedItems',
+            'query': {'url': url, 'params': payload},
+            'stats': None,
+            'samples': []
+        }
+
+        try:
+            if not EBAY_APP_ID:
+                raise RuntimeError('Missing EBAY_APP_ID')
+
+            r = requests.get(url, params=payload, timeout=8)
+            r.raise_for_status()
+            data = r.json()
+
+            items = (((data or {}).get('findCompletedItemsResponse') or [{}])[0]
+                    .get('searchResult') or [{}])[0].get('item', [])
+
+            prices, samples = [], []
+            currency = 'EUR'
+            for it in items:
+                selling = ((it.get('sellingStatus') or [{}])[0])
+                state   = (selling.get('sellingState') or [''])[0]
+                if state != 'EndedWithSales':    # solo effettivamente venduti
+                    continue
+
+                curr_price = ((selling.get('currentPrice') or [{}])[0])
+                price_val  = float(curr_price.get('__value__', '0') or 0)
+                currency   = curr_price.get('@currencyId', currency)
+
+                # Se disponibile, usa il prezzo convertito
+                conv = (selling.get('convertedCurrentPrice') or [{}])[0]
+                if conv and conv.get('__value__'):
+                    price_val = float(conv.get('__value__', price_val) or price_val)
+                    currency  = conv.get('@currencyId', currency)
+
+                title    = (it.get('title') or [''])[0]
+                view_url = (it.get('viewItemURL') or [''])[0]
+                end_time = (((it.get('listingInfo') or [{}])[0]).get('endTime') or [''])[0]
+
+                prices.append(price_val)
+                if len(samples) < 5:
+                    samples.append({'title': title, 'price': price_val, 'currency': currency,
+                                    'url': view_url, 'endTime': end_time})
+
+            if not prices:
+                result['stats'] = {'count': 0}
+            else:
+                avg = sum(prices)/len(prices)
+                med = statistics.median(prices)
+                mn, mx = min(prices), max(prices)
+                result['stats']   = {'count': len(prices), 'avg': round(avg,2), 'median': round(med,2),
+                                    'min': round(mn,2), 'max': round(mx,2), 'currency': currency}
+                result['samples'] = samples
+
+            return jsonify(result), 200
+
+        except Exception:
+            # Fallback se manca la key o non raggiungo eBay:
+            base = float(item.get('purchase_price') or 0) or 50.0
+            est  = base * 1.1
+            result['stats'] = {'count': 0, 'avg': round(est,2), 'median': round(est,2),
+                            'min': round(base*0.9,2), 'max': round(base*1.3,2),
+                            'currency': item.get('currency') or 'EUR', 'stub': True}
+            return jsonify(result)
+
+    @app.route('/api/ebay-estimate')
+    @require_login
+    def ebay_estimate():
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'error': 'Item not found'}), 404
+        item = dict(row)
+
+        parts = [item.get('name') or '']
+        if item.get('language'): parts.append(item['language'])
+        if item.get('category'): parts.append(item['category'])
+        if item.get('condition'): parts.append(item['condition'])
+        keywords = " ".join([p for p in parts if p]).strip() or "collectible"
+
+        import requests, statistics, os as _os, datetime as _dt
+        EBAY_APP_ID = os.environ.get("EBAY_CLIENT_ID")
+        site_id = _os.getenv('EBAY_SITE_ID', '101')
+
+        payload = {
+            'OPERATION-NAME': 'findCompletedItems',
+            'SERVICE-VERSION': '1.13.0',
+            'SECURITY-APPNAME': EBAY_APP_ID or '',
+            'RESPONSE-DATA-FORMAT': 'JSON',
+            'REST-PAYLOAD': 'true',
+            'keywords': keywords,
+            'paginationInput.entriesPerPage': '25',
+            'itemFilter(0).name': 'SoldItemsOnly',
+            'itemFilter(0).value': 'true',
+            'siteid': site_id,
+        }
+        url = 'https://svcs.ebay.com/services/search/FindingService/v1'
+        result = {'source':'eBay Finding API - findCompletedItems','query':{'url':url,'params':payload},'stats':None,'samples':[]}
+
+        try:
+            if not EBAY_APP_ID:
+                raise RuntimeError('Missing EBAY_APP_ID')
+            r = requests.get(url, params=payload, timeout=8)
+            r.raise_for_status()
+            data = r.json()
+            items = (((data or {}).get('findCompletedItemsResponse') or [{}])[0].get('searchResult') or [{}])[0].get('item', [])
+            prices, samples = [], []
+            currency = item.get('currency') or 'EUR'
+            for it in items:
+                selling = ((it.get('sellingStatus') or [{}])[0])
+                state   = (selling.get('sellingState') or [''])[0]
+                if state != 'EndedWithSales':
+                    continue
+                curr_price = ((it.get('sellingStatus') or [{}])[0].get('currentPrice') or [{}])[0]
+                price_val  = float(curr_price.get('__value__', '0') or 0)
+                currency   = curr_price.get('@currencyId', currency)
+                conv = ((it.get('sellingStatus') or [{}])[0].get('convertedCurrentPrice') or [{}])[0]
+                if conv and conv.get('__value__'):
+                    price_val = float(conv.get('__value__', price_val) or price_val)
+                    currency  = conv.get('@currencyId', currency)
+                title    = (it.get('title') or [''])[0]
+                view_url = (it.get('viewItemURL') or [''])[0]
+                end_time = (((it.get('listingInfo') or [{}])[0]).get('endTime') or [''])[0]
+                prices.append(price_val)
+                if len(samples) < 5:
+                    samples.append({'title': title, 'price': price_val, 'currency': currency, 'url': view_url, 'endTime': end_time})
+
+            today = _dt.date.today().isoformat()
+
+            if prices:
+                avg = sum(prices)/len(prices)
+                med = statistics.median(prices)
+                mn, mx = min(prices), max(prices)
+                stats = {'count': len(prices), 'avg': round(avg,2), 'median': round(med,2), 'min': round(mn,2), 'max': round(mx,2), 'currency': currency}
+            else:
+                stats = {'count': 0, 'currency': item.get('currency') or 'EUR'}
+
+            cur.execute("""
+                INSERT INTO ebay_price_history (item_id, date, avg, median, min, max, count, currency, keywords, site_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(item_id, date) DO UPDATE SET
+                    avg=excluded.avg, median=excluded.median, min=excluded.min, max=excluded.max,
+                    count=excluded.count, currency=excluded.currency, keywords=excluded.keywords, site_id=excluded.site_id
+            """, (item_id, today, stats.get('avg'), stats.get('median'), stats.get('min'), stats.get('max'),
+                    stats.get('count',0), stats.get('currency'), keywords, str(site_id)))
+            conn.commit()
+
+            result['stats'] = stats
+            result['samples'] = samples
+            conn.close()
+            return jsonify(result), 200
+
+        except Exception:
+            base_val = float(item.get('purchase_price') or 0) or 50.0
+            est = base_val * 1.1
+            today = _dt.date.today().isoformat()
+            stats = {'count': 0, 'avg': round(est,2), 'median': round(est,2), 'min': round(base_val*0.9,2), 'max': round(base_val*1.3,2), 'currency': item.get('currency') or 'EUR', 'stub': True}
+            cur.execute("""
+                INSERT INTO ebay_price_history (item_id, date, avg, median, min, max, count, currency, keywords, site_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(item_id, date) DO UPDATE SET
+                    avg=excluded.avg, median=excluded.median, min=excluded.min, max=excluded.max,
+                    count=excluded.count, currency=excluded.currency, keywords=excluded.keywords, site_id=excluded.site_id
+            """, (item_id, today, stats.get('avg'), stats.get('median'), stats.get('min'), stats.get('max'),
+                    stats.get('count',0), stats.get('currency'), keywords, str(site_id)))
+            conn.commit(); conn.close()
+            result['stats'] = stats
+            return jsonify(result), 200
+
+    @app.route('/api/ebay-history')
+    @require_login
+    def ebay_history():
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error':'Missing item_id'}), 400
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT date, avg, median, min, max, count, currency, keywords FROM ebay_price_history WHERE item_id = ? ORDER BY date ASC", (item_id,))
+        rows = cur.fetchall(); conn.close()
+        return jsonify([dict(r) for r in rows]), 200
+
+    @app.route('/api/pricecharting-estimate')
+    @require_login
+    def pricecharting_estimate():
+        """Estimate from PriceCharting Prices API using /api/product with q.
+        Env: PRICECHARTING_TOKEN or PRICECHARTING_T
+        """
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error':'Missing item_id'}), 400
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone(); conn.close()
+        if not row: return jsonify({'error':'Item not found'}), 404
+        item = dict(row)
+        #parts = [item.get('name').split() or '']
+        #if item.get('category'): parts.append(item['category'])
+        #if item.get('language'): parts.append(item['language'])
+        #if item.get('condition'): parts.append(item['condition'])
+        #q = " ".join([p for p in parts if p]).strip() or "mario"
+        q = " ".join(item.get('name').split()[0:3]) or item.get('name')
+        import os, requests
+        token = os.getenv('PRICECHARTING_TOKEN') or os.getenv('PRICECHARTING_T')
+        url = "https://www.pricecharting.com/api/product"
+        params = {'t': token or '', 'q': q}
+        result = {'source':'PriceCharting Prices API - /api/product','query':{'url':url,'params':{'t':('***' if token else ''),'q':q}},'product':None,'prices':None}
+        try:
+            if not token: raise RuntimeError('Missing PRICECHARTING_TOKEN')
+            r = requests.get(url, params=params, timeout=8); r.raise_for_status(); data = r.json()
+            if data.get('status') != 'success': raise RuntimeError(data.get('error-message') or 'API error')
+            def cents(x):
+                try: return round(int(x)/100.0,2)
+                except: return None
+            product = {'id': data.get('id'), 'product_name': data.get('product-name'), 'console_name': data.get('console-name'), 'upc': data.get('upc')}
+            prices = {
+                'loose': cents(data.get('loose-price')),
+                'cib': cents(data.get('cib-price')),
+                'new': cents(data.get('new-price')),
+                'retail_loose_sell': cents(data.get('retail-loose-sell')),
+                'retail_cib_sell': cents(data.get('retail-cib-sell')),
+                'retail_new_sell': cents(data.get('retail-new-sell')),
+                'currency': 'USD'
+            }
+            result['product'] = product
+            result['prices'] = prices
+            return jsonify(result), 200
+        except Exception as e:
+            base_val = float(item.get('purchase_price') or 0) or None
+            result['prices'] = {'loose': base_val, 'currency': item.get('currency') or 'EUR', 'stub': True}
+            return jsonify(result), 200
+
+
+
+    @app.route('/api/discogs-estimate')
+    @require_login
+    def discogs_estimate():
+        """
+        Stima Discogs per un item:
+        - Se presente discogs_release_id in market_params → lookup diretto
+        - Altrimenti ricerca strutturata su /database/search (type=release) usando i campi market
+        - Poi:
+            /marketplace/price_suggestions/{release_id}  → suggerimenti per condizione (avg/median/min/max)
+            /marketplace/stats/{release_id}              → num_for_sale, lowest_price, ecc.
+        - Ritorna: source, query, release scelto, suggestions, stats (prezzi), market_stats (annunci attivi)
+        """
+        import os, json, requests, statistics as _st
+
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+
+        # --- carica item ---
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': 'Item not found'}), 404
+
+        # sqlite Row → dict
+        try:
+            item = dict(row)
+        except Exception:
+            item = row
+
+        # --- market_params ---
+        mp = {}
+        try:
+            raw_mp = item.get('market_params')
+            if raw_mp:
+                mp = json.loads(raw_mp) if isinstance(raw_mp, str) else raw_mp
+        except Exception:
+            mp = {}
+        if not isinstance(mp, dict):
+            mp = {}
+
+        discogs_release_id = mp.get('discogs_release_id') or mp.get('release_id')
+
+        # categoria → formato desiderato
+        cat = (item.get('category') or '').lower()
+        desired_format = None
+        if any(x in cat for x in ('vinyl', 'vinile', 'lp')):
+            desired_format = 'LP'
+        elif 'cd' in cat or 'compact disc' in cat:
+            desired_format = 'CD'
+
+        # ricerca strutturata per /database/search
+        search_params = {}
+        if mp.get('artist'):  search_params['artist'] = mp['artist']
+        if mp.get('album'):   search_params['release_title'] = mp['album']
+        if mp.get('year'):    search_params['year'] = mp['year']
+        if mp.get('label'):   search_params['label'] = mp['label']
+        if mp.get('catno'):   search_params['catno'] = mp['catno']
+        if mp.get('barcode'): search_params['barcode'] = mp['barcode']
+        if mp.get('country'): search_params['country'] = mp['country']
+        if mp.get('format'):  search_params['format'] = mp['format']  # se già specificato
+
+        # fallback testo libero
+        free_q = ' '.join([str(item.get(k) or '') for k in ('name','description','category','tags')]).strip()
+
+        # --- Discogs setup ---
+        token = os.getenv('DISCOGS_TOKEN') or os.getenv('DISCOGS_API_TOKEN')
+        key   = os.getenv('DISCOGS_KEY')
+        sec   = os.getenv('DISCOGS_SECRET')
+        headers = {
+            'User-Agent': os.getenv('DISCOGS_UA', 'CollectorStreet/1.2 (+https://collectorstreet)')
+        }
+        if token:
+            headers['Authorization'] = f'Discogs token={token}'
+
+        base_api = 'https://api.discogs.com'
+        result = {
+            'source': 'Discogs API',
+            'query': {},
+            'release': None,
+            'suggestions': None,   # raw map per condizione
+            'stats': None,         # media/mediana/min/max dai suggestions
+            'market_stats': None   # num_for_sale, lowest_price ecc.
+        }
+
+        # ---- 1) Trova release_id ----
+        release_id = None
+        used_search = False
+
+        try:
+            if discogs_release_id:
+                # Verifica che la release esista
+                url = f"{base_api}/releases/{discogs_release_id}"
+                params = {}
+                if not token and key and sec:
+                    params.update({'key': key, 'secret': sec})
+                rr = requests.get(url, headers=headers, params=params, timeout=12)
+                rr.raise_for_status()
+                rel = rr.json()
+                release_id = rel.get('id')
+                result['release'] = {
+                    'id': release_id,
+                    'title': rel.get('title'),
+                    'artist_names' : [a.get("name") for a in rel.get("artists", [])],
+                    'year': rel.get('year'),
+                    'country': rel.get('country'),
+                    'labels': [l.get('name') for l in rel.get('labels', []) if l.get('name')],
+                    'formats': [f.get('name') for f in rel.get('formats', []) if f.get('name')],
+                }
+                result['query']['releases_lookup'] = {'url': url, 'id': discogs_release_id}
+            else:
+                # database/search
+                url = f"{base_api}/database/search"
+                params = {'type': 'release'}
+                if free_q: params['q'] = free_q
+                if desired_format and 'format' not in search_params:
+                    params['format'] = desired_format
+                # merge dei parametri strutturati
+                for k, v in (search_params or {}).items():
+                    if v: params[k] = v
+                if not token and key and sec:
+                    params.update({'key': key, 'secret': sec})
+
+                result['query']['search'] = {
+                    'url': url,
+                    'params': {k: ('***' if k in ('key','secret') else v) for k, v in params.items()}
+                }
+
+                rs = requests.get(url, params=params, headers=headers, timeout=12)
+                rs.raise_for_status()
+                data = rs.json() or {}
+                rels = data.get('results') or []
+                if not rels:
+                    return jsonify({**result, 'error': 'Nessuna release trovata'}), 200
+
+                # preferisci formato/anno se possibile
+                def score(r):
+                    s = 0
+                    fmts = r.get('format') or []
+                    if desired_format and any(desired_format.lower() == (f or '').lower() for f in fmts):
+                        s -= 10
+                    try:
+                        y_req = int(mp.get('year')) if mp.get('year') else None
+                        y_rel = int(r.get('year')) if r.get('year') else None
+                        if y_req and y_rel:
+                            s += abs(y_req - y_rel)  # più vicino all'anno
+                    except Exception:
+                        pass
+                    if mp.get('catno') and (r.get('catno') or '').lower() == mp['catno'].lower():
+                        s -= 5
+                    if mp.get('label') and (r.get('label') or [''])[0].lower() == mp['label'].lower():
+                        s -= 3
+                    return s
+
+                rels = sorted(rels, key=score)
+                top = rels[0]
+                release_id = top.get('id')
+                result['release'] = {
+                    'id': release_id,
+                    'title': top.get('title'),
+                    'year': top.get('year'),
+                    'country': top.get('country'),
+                    'labels': top.get('label'),
+                    'formats': top.get('format') or []
+                }
+                used_search = True
+
+            if not release_id:
+                return jsonify({**result, 'error': 'Release ID non determinato'}), 200
+
+            # ---- 2) Price suggestions ----
+            ps_url = f"{base_api}/marketplace/price_suggestions/{release_id}"
+            ps_headers = dict(headers)
+            ps_params = {}
+            if not token and key and sec:
+                ps_params.update({'key': key, 'secret': sec})
+
+            result['query']['price_suggestions'] = {
+                'url': ps_url,
+                'auth': 'token' if token else ('key/secret' if (key and sec) else 'none')
+            }
+
+            suggestions = None
+            try:
+                pr = requests.get(ps_url, headers=ps_headers, params=ps_params, timeout=12)
+                pr.raise_for_status()
+                suggestions = pr.json()  # { "Mint (M)": {"currency":"USD","value":xx}, ... }
+            except Exception as e:
+                # non bloccare il flusso: alcuni ID non hanno suggestions
+                result['query']['price_suggestions_error'] = str(e)
+
+            # ---- 3) Marketplace stats (num_for_sale, lowest_price) ----
+            stats_url = f"{base_api}/marketplace/stats/{release_id}"
+            st_params = {}
+            if not token and key and sec:
+                st_params.update({'key': key, 'secret': sec})
+
+            result['query']['marketplace_stats'] = {
+                'url': stats_url,
+                'auth': 'token' if token else ('key/secret' if (key and sec) else 'none')
+            }
+
+            market_stats = None
+            try:
+                sr = requests.get(stats_url, headers=headers, params=st_params, timeout=12)
+                sr.raise_for_status()
+                market_stats = sr.json()  # {'num_for_sale':..., 'lowest_price':{'value','currency'}, ...}
+            except Exception as e:
+                result['query']['marketplace_stats_error'] = str(e)
+
+            # ---- 4) Sintesi prezzi (media/min/max/mediana) ----
+            price_stats = None
+            if isinstance(suggestions, dict) and suggestions:
+                vals = [v.get('value') for v in suggestions.values()
+                        if isinstance(v, dict) and v.get('value') is not None]
+                cur = None
+                for v in suggestions.values():
+                    if isinstance(v, dict) and v.get('currency'):
+                        cur = v['currency']; break
+                if vals:
+                    price_stats = {
+                        'count': len(vals),
+                        'avg': round(sum(vals)/len(vals), 2),
+                        'median': round(_st.median(vals), 2),
+                        'min': round(min(vals), 2),
+                        'max': round(max(vals), 2),
+                        'currency': cur or (market_stats or {}).get('lowest_price', {}).get('currency') or 'USD'
+                    }
+
+            # ---- 5) Componi risposta ----
+            result['suggestions'] = suggestions
+            result['stats'] = price_stats
+            result['market_stats'] = {
+                'num_for_sale': (market_stats or {}).get('num_for_sale'),
+                'lowest_price': (market_stats or {}).get('lowest_price'),
+                'median_price': (market_stats or {}).get('median_price'),
+                'currency': (market_stats or {}).get('lowest_price', {}).get('currency')
+            }
+
+            # opzionale: breve riassunto per UI
+            result['summary'] = {
+                'prezzo_medio_suggerito': (price_stats or {}).get('avg'),
+                'annunci_attivi': (result['market_stats'] or {}).get('num_for_sale'),
+                'currency': (price_stats or {}).get('currency') or (result['market_stats'] or {}).get('currency')
+            }
+
+            return jsonify(result), 200
+
+        except requests.HTTPError as e:
+            result['error'] = f"HTTP {e.response.status_code}: {e.response.text[:300]}"
+            return jsonify(result), 200
+        except Exception as e:
+            result['error'] = str(e)
+            return jsonify(result), 200
+
+
+    @app.route('/api/lego-estimate')
+    @require_login
+    def lego_estimate():
+        import os, re, requests
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = cur.fetchone(); conn.close()
+        if not row: return jsonify({'error':'Item not found'}), 404
+        item = dict(row)
+
+        name = (item.get('name') or '').strip()
+        category = (item.get('category') or '').strip().lower()
+
+        # infer numeric code from name if present (3-7 digits)
+        inferred = None
+        m = re.search(r'(?:lego\s*)?(\d{3,7})(?!\d)', name.lower())
+        if m: inferred = m.group(1)
+
+        result = {'source':'Rebrickable API','query':None,'best':None,'results':[],'inferred':inferred}
+        api_key = os.getenv('REBRICKABLE_API_KEY')
+        base_url = 'https://rebrickable.com/api/v3/lego/sets/'
+        params = {'search': name, 'page_size': 10}
+
+        if not api_key:
+            result['query'] = {'url': base_url, 'params': params, 'note':'Missing REBRICKABLE_API_KEY'}
+            if inferred: result['best'] = {'set_num': f'{inferred}-1', 'set_number': inferred, 'name': name, 'source':'inferred'}
+            return jsonify(result), 200
+
+        try:
+            headers = {'Authorization': f'key {api_key}'}
+            r = requests.get(base_url, headers=headers, params=params, timeout=8)
+            r.raise_for_status()
+            data = r.json()
+            items = data.get('results') or []
+            simplified, best = [], None
+            for it in items:
+                set_num = it.get('set_num')
+                set_number = set_num.split('-')[0] if set_num else None
+                entry = {'set_num': set_num, 'set_number': set_number, 'name': it.get('name'),
+                        'year': it.get('year'), 'num_parts': it.get('num_parts'), 'theme_id': it.get('theme_id'),
+                        'img': it.get('set_img_url'), 'url': f"https://rebrickable.com/sets/{set_num}/" if set_num else None}
+                simplified.append(entry)
+                if inferred and set_number == inferred and best is None: best = entry
+            if not best and simplified: best = simplified[0]
+            result['query'] = {'url': base_url, 'params': params}
+            result['results'] = simplified
+            result['best'] = best or ({'set_num': f'{inferred}-1', 'set_number': inferred, 'name': name, 'source':'inferred'} if inferred else None)
+            return jsonify(result), 200
+        except Exception as e:
+            result['query'] = {'url': base_url, 'params': params, 'error': str(e)}
+            if inferred: result['best'] = {'set_num': f'{inferred}-1', 'set_number': inferred, 'name': name, 'source':'inferred'}
+            return jsonify(result), 200
+
+    @app.route('/api/justtcg-estimate')
+    @require_login
+    def justtcg_estimate():
+        """
+        TCG pricing via JustTCG.
+        Env: JUSTTCG_API_KEY
+        Docs: https://api.justtcg.com/v1  (cards endpoint)
+        """
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error': 'Missing item_id'}), 400
+
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id=?", (item_id,))
+        row = cur.fetchone(); conn.close()
+        if not row: return jsonify({'error':'Item not found'}), 404
+        item = dict(row)
+
+        import os, re, requests, statistics as _st
+        API = os.getenv('JUSTTCG_API_KEY')
+        base_url = 'https://api.justtcg.com/v1/cards'
+        if not API:
+            return jsonify({
+                'source':'JustTCG Cards API',
+                'error':'Missing JUSTTCG_API_KEY',
+                'query': {'url': base_url}
+            }), 200
+
+        name = (item.get('name') or '').strip()
+        cat  = (item.get('category') or '').lower()
+        tags = (item.get('tags') or '').lower()
+        cond = (item.get('condition') or '').strip()
+
+        # infer game
+        txt = " ".join([name.lower(), cat, tags])
+        game = None
+        if 'pokemon' in txt or 'pokémon' in txt: game = 'pokemon'
+        elif 'mtg' in txt or 'magic' in txt:     game = 'mtg'
+        elif 'yu-gi-oh' in txt or 'yugioh' in txt: game = 'yugioh'
+        elif 'lorcana' in txt:                   game = 'disney-lorcana'
+        elif 'one piece' in txt or 'onepiece' in txt: game = 'one-piece-card-game'
+        elif 'digimon' in txt:                   game = 'digimon-card-game'
+
+        # map condition → abbreviations JustTCG (NM/LP/…)
+        def map_condition(c):
+            c = (c or '').lower()
+            if 'sealed' in c: return 'S'
+            if 'nm' in c or 'near' in c: return 'NM'
+            if 'lp' in c or 'light' in c: return 'LP'
+            if 'mp' in c or 'moderate' in c: return 'MP'
+            if 'hp' in c or 'heavy' in c: return 'HP'
+            if 'dmg' in c or 'damag' in c: return 'DMG'
+            return None
+        condition = map_condition(cond)
+
+        # hint “printing”
+        printing = None
+        if re.search(r'foil|holo|reverse holo|rev holo', txt): printing = 'Foil'
+        elif re.search(r'first edition|1st ed', txt):          printing = 'First Edition'
+        elif 'unlimited' in txt:                               printing = 'Unlimited'
+
+        # Costruisco query: se hai un campo tcgplayer_id in DB, passalo come tcgplayerId (prioritario)
+        params = {}
+        tcgplayer_id = item.get('tcgplayer_id')
+        if tcgplayer_id:
+            params['tcgplayerId'] = str(tcgplayer_id)
+        else:
+            # ricerca “flessibile”: gioco + stringa libera
+            if game: params['game'] = game
+            # molti client usano `q` o il tris game/set/number; partiamo da q (fallback ok)
+            params['q'] = name
+
+        if condition: params['condition'] = condition
+        if printing:  params['printing']  = printing
+        params['include_statistics'] = '7d,30d,90d,1y'
+
+        result = {'source':'JustTCG Cards API', 'query': {'url': base_url, 'params': params},
+                'card': None, 'variants': [], 'stats': None}
+
+        try:
+            r = requests.get(base_url, headers={'x-api-key': API}, params=params, timeout=10)
+            r.raise_for_status()
+            js = r.json() or {}
+            data = js.get('data') or []
+            # Se non trova nulla, rilasso i filtri di printing/condition
+            if not data and not tcgplayer_id:
+                alt = dict(params); alt.pop('printing', None); alt.pop('condition', None)
+                rr = requests.get(base_url, headers={'x-api-key': API}, params=alt, timeout=10)
+                rr.raise_for_status()
+                data = (rr.json() or {}).get('data') or []
+                result['query']['alt_params'] = alt
+
+            if data:
+                card = data[0]
+                result['card'] = {
+                    'id': card.get('id'), 'name': card.get('name'),
+                    'game': card.get('game'), 'set_name': card.get('set_name'),
+                    'number': card.get('number'), 'tcgplayerId': card.get('tcgplayerId')
+                }
+                variants = card.get('variants') or []
+                # snellisco le varianti e calcolo stat su prezzi
+                slim, prices = [], []
+                for v in variants:
+                    entry = {
+                        'variant_id': v.get('id'),
+                        'printing':   v.get('printing'),
+                        'condition':  v.get('condition'),
+                        'language':   v.get('language'),
+                        'price':      v.get('price'),
+                        'low':        v.get('low'),
+                        'high':       v.get('high')
+                    }
+                    slim.append(entry)
+                    if v.get('price') is not None:
+                        try: prices.append(float(v['price']))
+                        except: pass
+                result['variants'] = slim
+                if prices:
+                    avg = sum(prices)/len(prices)
+                    import statistics as _st
+                    result['stats'] = {
+                        'count': len(prices),
+                        'avg':   round(avg,2),
+                        'median':round(_st.median(prices),2),
+                        'min':   round(min(prices),2),
+                        'max':   round(max(prices),2),
+                        'currency': 'USD'
+                    }
+            return jsonify(result), 200
+        except Exception as e:
+            result['error'] = str(e)
+            return jsonify(result), 200
+
+    @app.route('/api/stockx-estimate')
+    @require_login
+    def stockx_estimate():
+        item_id = request.args.get('item_id', type=int)
+        if not item_id:
+            return jsonify({'error':'Missing item_id'}), 400
+        conn = get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
+        row = conn.fetchone(); conn.close()
+        if not row: return jsonify({'error':'Item not found'}), 404
+        item = dict(row)
+
+        import os, requests, statistics as _st
+        q_parts = [item.get('name') or '']
+        if item.get('brand'): q_parts.append(item['brand'])
+        if item.get('condition'): q_parts.append(item['condition'])
+        q = " ".join([p for p in q_parts if p]).strip()
+
+        def _stats(m):
+            try:
+                vals = [float(v) for k,v in m.items() if k in ('lastSale','lowestAsk','highestBid') and v is not None]
+                if not vals: return None
+                mn, mx = min(vals), max(vals); avg = sum(vals)/len(vals); med = _st.median(vals)
+                return {'count': len(vals), 'avg': round(avg,2), 'median': round(med,2), 'min': round(mn,2), 'max': round(mx,2), 'currency': 'USD'}
+            except: return None
+
+        result = {'source':'StockX Market Data','query':{},'product':None,'market':None,'stats':None}
+
+        # 1) RapidAPI
+        RAPID_KEY = os.getenv('STOCKX_RAPIDAPI_KEY')
+        RAPID_HOST = os.getenv('STOCKX_RAPIDAPI_HOST','stockx-data.p.rapidapi.com')
+        if RAPID_KEY and q:
+            try:
+                h = {'X-RapidAPI-Key': RAPID_KEY, 'X-RapidAPI-Host': RAPID_HOST}
+                s_url = f'https://{RAPID_HOST}/search'; s_params={'query': q}
+                sr = requests.get(s_url, headers=h, params=s_params, timeout=10); sr.raise_for_status(); sjs = sr.json()
+                items = sjs.get('data') or sjs.get('products') or sjs.get('hits') or (sjs if isinstance(sjs, list) else [])
+                if not items: raise RuntimeError('no search result')
+                top = items[0]
+                pid = top.get('id') or top.get('uuid') or top.get('productId') or top.get('_id')
+                urlKey = top.get('urlKey') or top.get('url') or top.get('slug')
+                name = top.get('name') or top.get('title')
+                product = {'id': pid, 'urlKey': urlKey, 'name': name}
+
+                market = None; used_ep=None; used_params=None
+                for ep, params in [('product-details', {'productId': pid} if pid else None), ('product', {'urlKey': urlKey} if urlKey else None)]:
+                    if not params: continue
+                    d_url = f'https://{RAPID_HOST}/{ep}'
+                    dr = requests.get(d_url, headers=h, params=params, timeout=10)
+                    if dr.status_code >= 400: continue
+                    dj = dr.json()
+                    m = dj.get('market') or dj.get('Product') or dj.get('data') or dj
+                    cand = {
+                        'lastSale': m.get('lastSale') if isinstance(m,dict) else None,
+                        'lowestAsk': m.get('lowestAsk') if isinstance(m,dict) else None,
+                        'highestBid': m.get('highestBid') if isinstance(m,dict) else None,
+                        'deadstockSold': m.get('deadstockSold') if isinstance(m,dict) else None,
+                        'volatility': m.get('volatility') if isinstance(m,dict) else None,
+                        'pricePremium': m.get('pricePremium') if isinstance(m,dict) else None,
+                    }
+                    for k in list(cand.keys()):
+                        try: cand[k] = float(cand[k]) if cand[k] is not None else None
+                        except: 
+                            try: cand[k] = float(str(cand[k]).replace('$','').replace(',',''))
+                            except: pass
+                    market = cand; used_ep=ep; used_params=params; break
+
+                if market:
+                    result['query']={'via':'RapidAPI','search':{'url':s_url,'params':s_params},'detail_endpoint':used_ep,'detail_params':used_params}
+                    result['product']=product; result['market']=market; result['stats']=_stats(market) or {'count':0,'currency':'USD'}
+                    return jsonify(result), 200
+            except Exception as e:
+                result['rapidapi_error'] = str(e)
+
+        # 2) Browse best-effort
+        try:
+            if q:
+                headers={'User-Agent':'Mozilla/5.0','Accept':'application/json, text/plain, */*','x-requested-with':'XMLHttpRequest'}
+                s_url='https://stockx.com/api/browse'; s_params={'_search': q}
+                sr=requests.get(s_url, headers=headers, params=s_params, timeout=10); sr.raise_for_status(); sjs=sr.json()
+                prods = sjs.get('Products') or []
+                if prods:
+                    top=prods[0]; urlKey=top.get('urlKey') or top.get('url') or top.get('slug'); name=top.get('title') or top.get('name')
+                    if urlKey:
+                        d_url=f'https://stockx.com/api/products/{urlKey}'; d_params={'includes':'market'}
+                        dr=requests.get(d_url, headers=headers, params=d_params, timeout=10); dr.raise_for_status(); dj=dr.json()
+                        p=dj.get('Product') or {}; market=p.get('market') or {}
+                        cand={'lastSale':market.get('lastSale'),'lowestAsk':market.get('lowestAsk'),'highestBid':market.get('highestBid'),
+                            'deadstockSold':market.get('deadstockSold'),'volatility':market.get('volatility'),'pricePremium':market.get('pricePremium')}
+                        for k in list(cand.keys()):
+                            try: cand[k] = float(cand[k]) if cand[k] is not None else None
+                            except:
+                                try: cand[k] = float(str(cand[k]).replace('$','').replace(',',''))
+                                except: pass
+                        result['query']={'via':'browse','search':{'url':s_url,'params':s_params},'detail':{'url':d_url,'params':d_params}}
+                        result['product']={'urlKey':urlKey,'name':name}; result['market']=cand; result['stats']=_stats(cand) or {'count':0,'currency':'USD'}
+                        return jsonify(result), 200
+        except Exception as e:
+            result['browse_error']=str(e)
+
+        # 3) Fallback
+        base_val = float(item.get('purchase_price') or 0) or None
+        if base_val is not None:
+            market={'lastSale': base_val*1.05, 'lowestAsk': base_val*1.1, 'highestBid': base_val*0.95}
+            result['market']=market; result['stats']=_stats(market)
+        return jsonify(result), 200
+
     return app
 
 
@@ -1414,3 +2036,6 @@ if __name__ == '__main__':
     # When executed directly, run the app on localhost for development
     app = create_app()
     app.run(host='0.0.0.0', port=5000, debug=True)
+
+
+
