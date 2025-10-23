@@ -814,39 +814,58 @@ function renderDiscogsSection(item){
     const query = document.getElementById('2mQuery');
     const content = document.getElementById('2mContent');
 
-    if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+    if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>';
+    if (src) src.textContent='';
+    if (query) src.textContent='';
+
     fetch(`/api/discogs-estimate?item_id=${item.id}`).then(r=>r.json()).then(data=>{
         if (!content) return;
-        if (data && data.query){
-        const qurl = data.query.url || 'Discogs Search';
-        const qparams = data.query.params || {}; const q = qparams.q || '';
-        const rel = data.query.used_release ? ` · Release #${data.query.used_release.id}` : '';
-        const psu = data.query.price_suggestions_url ? ` · PriceSuggestions: ${data.query.price_suggestions_url}` : '';
-        src.textContent = `· Fonte: Discogs (${qurl})`;
-        query.textContent = `· Query: "${q}"${rel}${psu}`;
+        if (data && data.query)
+        {
+            
+            const qurl = data.query.releases_lookup.url || 'Discogs Search';
+            const qparams = data.query.params || {};
+            const q = qparams.q || '';
+            const release = data.release;
+            const error = data.error || null
+            if (error)  
+            {
+                src.textContent = `· Error: (${error})`;
+                throw error;
+            }
+            //const rel = data.query.releases_lookup.id ? ` · Release ID #${data.query.releases_lookup.id}` : '';
+            //const psu = data.query.price_suggestions_url ? ` · PriceSuggestions: ${data.query.price_suggestions_url}` : '';
+            //const psu = '';
+            //src.textContent = `· Fonte: Discogs (${qurl})`;
+            //query.textContent = `· Query: "${q}"${rel}${psu}`;
+            src.textContent = `· Fonte: Discogs (${qurl})`;
+            query.innerHTML = `· Product: <a href="https://www.discogs.com/it/release/${data.query.releases_lookup.id}-${release.artist_names[0]}-${release.title}" target="_blank" rel="noopener">Link</a>`;
+            //query.textContent = `· Product: "https://www.discogs.com/it/release/${data.query.releases_lookup.id}-${release.title}"`;
         }
-        if (data && data.suggestions){
-        const parts = [];
-        if (data.release && (data.release.title || data.release.year)){
-            const meta=[]; if (data.release.title) meta.push(data.release.title); if (data.release.year) meta.push(`(${data.release.year})`);
-            if (data.release.formats && data.release.formats.length) meta.push(`[${data.release.formats.join(', ')}]`);
-            parts.push(`<span class="pill"><strong>Release</strong> ${meta.join(' ')}</span>`);
-        }
-        Object.entries(data.suggestions).forEach(([cond,obj])=>{
-            const val = obj && obj.value!=null ? Number(obj.value) : null;
-            if (val!=null) parts.push(`<span class="pill"><strong>${cond}</strong> ${fmtMoney(val,'USD')}</span>`);
-        });
-        if (data.stats){
-            const c = data.stats.currency || 'USD';
-            parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg,c)}</span>`);
-            parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median,c)}</span>`);
-            parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min,c)} – ${fmtMoney(data.stats.max,c)}</span>`);
-            parts.push(`<span class="pill"><strong>Campioni</strong> ${data.stats.count||0}</span>`);
-        }
-        content.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
-        } else {
-        const msg = data && data.error ? `Errore Discogs: ${data.error}` : 'Nessuna stima disponibile.';
-        content.innerHTML = `<em>${msg}</em>`;
+        if (data && data.suggestions)
+        {
+            const parts = [];
+            if (data.release && (data.release.title || data.release.year)){
+                const meta=[]; if (data.release.title) meta.push(data.release.title); if (data.release.year) meta.push(`(${data.release.year})`);
+                if (data.release.formats && data.release.formats.length) meta.push(`[${data.release.formats.join(', ')}]`);
+                parts.push(`<span class="pill"><strong>Release</strong> ${meta.join(' ')}</span>`);
+            }
+            Object.entries(data.suggestions).forEach(([cond,obj])=>{
+                const val = obj && obj.value!=null ? Number(obj.value) : null;
+                if (val!=null) parts.push(`<span class="pill"><strong>${cond}</strong> ${fmtMoney(val,'USD')}</span>`);
+            });
+            if (data.stats){
+                const c = data.stats.currency || 'USD';
+                parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg,c)}</span>`);
+                parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median,c)}</span>`);
+                parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min,c)} – ${fmtMoney(data.stats.max,c)}</span>`);
+                parts.push(`<span class="pill"><strong>Campioni</strong> ${data.stats.count||0}</span>`);
+            }
+            content.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
+        } else
+        {
+            const msg = data && data.error ? `Errore Discogs: ${data.error}` : 'Nessuna stima disponibile.';
+            content.innerHTML = `<em>${msg}</em>`;
         }
     }).catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
 }

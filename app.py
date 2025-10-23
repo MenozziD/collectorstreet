@@ -1472,13 +1472,27 @@ def create_app(db_path: str = "database.db") -> Flask:
             result['prices'] = {'loose': base_val, 'currency': item.get('currency') or 'EUR', 'stub': True}
             return jsonify(result), 200
 
+
+
     @app.route('/api/discogs-estimate')
     @require_login
     def discogs_estimate():
+        """
+        Stima Discogs per un item:
+        - Se presente discogs_release_id in market_params → lookup diretto
+        - Altrimenti ricerca strutturata su /database/search (type=release) usando i campi market
+        - Poi:
+            /marketplace/price_suggestions/{release_id}  → suggerimenti per condizione (avg/median/min/max)
+            /marketplace/stats/{release_id}              → num_for_sale, lowest_price, ecc.
+        - Ritorna: source, query, release scelto, suggestions, stats (prezzi), market_stats (annunci attivi)
+        """
+        import os, json, requests, statistics as _st
+
         item_id = request.args.get('item_id', type=int)
         if not item_id:
             return jsonify({'error': 'Missing item_id'}), 400
 
+        # --- carica item ---
         conn = get_db_connection()
         cur = conn.cursor()
         cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
@@ -1486,64 +1500,238 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.close()
         if not row:
             return jsonify({'error': 'Item not found'}), 404
-        item = dict(row)
 
-        import os, requests, statistics as _st
-        token = os.getenv('DISCOGS_TOKEN')
-        key   = os.getenv('DISCOGS_KEY')
-        sec   = os.getenv('DISCOGS_SECRET')
-        headers = {'User-Agent': os.getenv('DISCOGS_UA', 'CollectorStreet/1.0 (+https://collectorstreet)')}
+        # sqlite Row → dict
+        try:
+            item = dict(row)
+        except Exception:
+            item = row
 
-        q = (item.get('name') or '').strip()
+        # --- market_params ---
+        mp = {}
+        try:
+            raw_mp = item.get('market_params')
+            if raw_mp:
+                mp = json.loads(raw_mp) if isinstance(raw_mp, str) else raw_mp
+        except Exception:
+            mp = {}
+        if not isinstance(mp, dict):
+            mp = {}
+
+        discogs_release_id = mp.get('discogs_release_id') or mp.get('release_id')
+
+        # categoria → formato desiderato
         cat = (item.get('category') or '').lower()
         desired_format = None
-        if 'vinyl' in cat or 'vinile' in cat or 'lp' in cat:
-            desired_format = 'Vinyl'
-        elif 'cd' in cat:
+        if any(x in cat for x in ('vinyl', 'vinile', 'lp')):
+            desired_format = 'LP'
+        elif 'cd' in cat or 'compact disc' in cat:
             desired_format = 'CD'
 
-        # Database search
-        base_url = 'https://api.discogs.com/database/search'
-        params = {'q': q, 'type': 'release'}
-        if desired_format: params['format'] = desired_format
+        # ricerca strutturata per /database/search
+        search_params = {}
+        if mp.get('artist'):  search_params['artist'] = mp['artist']
+        if mp.get('album'):   search_params['release_title'] = mp['album']
+        if mp.get('year'):    search_params['year'] = mp['year']
+        if mp.get('label'):   search_params['label'] = mp['label']
+        if mp.get('catno'):   search_params['catno'] = mp['catno']
+        if mp.get('barcode'): search_params['barcode'] = mp['barcode']
+        if mp.get('country'): search_params['country'] = mp['country']
+        if mp.get('format'):  search_params['format'] = mp['format']  # se già specificato
+
+        # fallback testo libero
+        free_q = ' '.join([str(item.get(k) or '') for k in ('name','description','category','tags')]).strip()
+
+        # --- Discogs setup ---
+        token = os.getenv('DISCOGS_TOKEN') or os.getenv('DISCOGS_API_TOKEN')
+        key   = os.getenv('DISCOGS_KEY')
+        sec   = os.getenv('DISCOGS_SECRET')
+        headers = {
+            'User-Agent': os.getenv('DISCOGS_UA', 'CollectorStreet/1.2 (+https://collectorstreet)')
+        }
         if token:
             headers['Authorization'] = f'Discogs token={token}'
-        elif key and sec:
-            params['key'] = key; params['secret'] = sec
 
-        result = {'source':'Discogs Price Suggestions','query':{'url': base_url, 'params': {k: ('***' if k in ('key','secret') else v) for k,v in params.items()}}, 'release':None, 'suggestions':None, 'stats':None}
+        base_api = 'https://api.discogs.com'
+        result = {
+            'source': 'Discogs API',
+            'query': {},
+            'release': None,
+            'suggestions': None,   # raw map per condizione
+            'stats': None,         # media/mediana/min/max dai suggestions
+            'market_stats': None   # num_for_sale, lowest_price ecc.
+        }
+
+        # ---- 1) Trova release_id ----
+        release_id = None
+        used_search = False
+
         try:
-            rs = requests.get(base_url, params=params, headers=headers, timeout=10)
-            rs.raise_for_status()
-            data = rs.json()
-            rels = data.get('results') or []
-            if not rels:
-                raise RuntimeError('Nessun release trovato')
-            # Prefer those with desired format
-            if desired_format:
-                def has_fmt(r): return desired_format.lower() in [f.lower() for f in (r.get('format') or [])]
-                rels = sorted(rels, key=lambda r: (not has_fmt(r), r.get('year') or 9999))
-            top = rels[0]
-            release_id = top.get('id')
-            result['release'] = {'id': release_id, 'title': top.get('title'), 'year': top.get('year'), 'formats': top.get('format') or []}
-            result['query']['used_release'] = result['release']
-            ps_url = f'https://api.discogs.com/marketplace/price_suggestions/{release_id}'
-            result['query']['price_suggestions_url'] = ps_url
-            # Price suggestions (requires auth - token strongly recommended)
+            if discogs_release_id:
+                # Verifica che la release esista
+                url = f"{base_api}/releases/{discogs_release_id}"
+                params = {}
+                if not token and key and sec:
+                    params.update({'key': key, 'secret': sec})
+                rr = requests.get(url, headers=headers, params=params, timeout=12)
+                rr.raise_for_status()
+                rel = rr.json()
+                release_id = rel.get('id')
+                result['release'] = {
+                    'id': release_id,
+                    'title': rel.get('title'),
+                    'artist_names' : [a.get("name") for a in rel.get("artists", [])],
+                    'year': rel.get('year'),
+                    'country': rel.get('country'),
+                    'labels': [l.get('name') for l in rel.get('labels', []) if l.get('name')],
+                    'formats': [f.get('name') for f in rel.get('formats', []) if f.get('name')],
+                }
+                result['query']['releases_lookup'] = {'url': url, 'id': discogs_release_id}
+            else:
+                # database/search
+                url = f"{base_api}/database/search"
+                params = {'type': 'release'}
+                if free_q: params['q'] = free_q
+                if desired_format and 'format' not in search_params:
+                    params['format'] = desired_format
+                # merge dei parametri strutturati
+                for k, v in (search_params or {}).items():
+                    if v: params[k] = v
+                if not token and key and sec:
+                    params.update({'key': key, 'secret': sec})
+
+                result['query']['search'] = {
+                    'url': url,
+                    'params': {k: ('***' if k in ('key','secret') else v) for k, v in params.items()}
+                }
+
+                rs = requests.get(url, params=params, headers=headers, timeout=12)
+                rs.raise_for_status()
+                data = rs.json() or {}
+                rels = data.get('results') or []
+                if not rels:
+                    return jsonify({**result, 'error': 'Nessuna release trovata'}), 200
+
+                # preferisci formato/anno se possibile
+                def score(r):
+                    s = 0
+                    fmts = r.get('format') or []
+                    if desired_format and any(desired_format.lower() == (f or '').lower() for f in fmts):
+                        s -= 10
+                    try:
+                        y_req = int(mp.get('year')) if mp.get('year') else None
+                        y_rel = int(r.get('year')) if r.get('year') else None
+                        if y_req and y_rel:
+                            s += abs(y_req - y_rel)  # più vicino all'anno
+                    except Exception:
+                        pass
+                    if mp.get('catno') and (r.get('catno') or '').lower() == mp['catno'].lower():
+                        s -= 5
+                    if mp.get('label') and (r.get('label') or [''])[0].lower() == mp['label'].lower():
+                        s -= 3
+                    return s
+
+                rels = sorted(rels, key=score)
+                top = rels[0]
+                release_id = top.get('id')
+                result['release'] = {
+                    'id': release_id,
+                    'title': top.get('title'),
+                    'year': top.get('year'),
+                    'country': top.get('country'),
+                    'labels': top.get('label'),
+                    'formats': top.get('format') or []
+                }
+                used_search = True
+
+            if not release_id:
+                return jsonify({**result, 'error': 'Release ID non determinato'}), 200
+
+            # ---- 2) Price suggestions ----
+            ps_url = f"{base_api}/marketplace/price_suggestions/{release_id}"
             ps_headers = dict(headers)
-            if token: ps_headers['Authorization'] = f'Discogs token={token}'
-            pr = requests.get(ps_url, headers=ps_headers, timeout=10)
-            pr.raise_for_status()
-            prices = pr.json()  # condition -> {value}
-            result['suggestions'] = prices
-            vals = [v.get('value') for v in prices.values() if isinstance(v, dict) and v.get('value') is not None]
-            if vals:
-                avg = sum(vals)/len(vals); mn=min(vals); mx=max(vals); med=_st.median(vals)
-                result['stats'] = {'count': len(vals), 'avg': round(avg,2), 'median': round(med,2), 'min': round(mn,2), 'max': round(mx,2), 'currency':'USD'}
+            ps_params = {}
+            if not token and key and sec:
+                ps_params.update({'key': key, 'secret': sec})
+
+            result['query']['price_suggestions'] = {
+                'url': ps_url,
+                'auth': 'token' if token else ('key/secret' if (key and sec) else 'none')
+            }
+
+            suggestions = None
+            try:
+                pr = requests.get(ps_url, headers=ps_headers, params=ps_params, timeout=12)
+                pr.raise_for_status()
+                suggestions = pr.json()  # { "Mint (M)": {"currency":"USD","value":xx}, ... }
+            except Exception as e:
+                # non bloccare il flusso: alcuni ID non hanno suggestions
+                result['query']['price_suggestions_error'] = str(e)
+
+            # ---- 3) Marketplace stats (num_for_sale, lowest_price) ----
+            stats_url = f"{base_api}/marketplace/stats/{release_id}"
+            st_params = {}
+            if not token and key and sec:
+                st_params.update({'key': key, 'secret': sec})
+
+            result['query']['marketplace_stats'] = {
+                'url': stats_url,
+                'auth': 'token' if token else ('key/secret' if (key and sec) else 'none')
+            }
+
+            market_stats = None
+            try:
+                sr = requests.get(stats_url, headers=headers, params=st_params, timeout=12)
+                sr.raise_for_status()
+                market_stats = sr.json()  # {'num_for_sale':..., 'lowest_price':{'value','currency'}, ...}
+            except Exception as e:
+                result['query']['marketplace_stats_error'] = str(e)
+
+            # ---- 4) Sintesi prezzi (media/min/max/mediana) ----
+            price_stats = None
+            if isinstance(suggestions, dict) and suggestions:
+                vals = [v.get('value') for v in suggestions.values()
+                        if isinstance(v, dict) and v.get('value') is not None]
+                cur = None
+                for v in suggestions.values():
+                    if isinstance(v, dict) and v.get('currency'):
+                        cur = v['currency']; break
+                if vals:
+                    price_stats = {
+                        'count': len(vals),
+                        'avg': round(sum(vals)/len(vals), 2),
+                        'median': round(_st.median(vals), 2),
+                        'min': round(min(vals), 2),
+                        'max': round(max(vals), 2),
+                        'currency': cur or (market_stats or {}).get('lowest_price', {}).get('currency') or 'USD'
+                    }
+
+            # ---- 5) Componi risposta ----
+            result['suggestions'] = suggestions
+            result['stats'] = price_stats
+            result['market_stats'] = {
+                'num_for_sale': (market_stats or {}).get('num_for_sale'),
+                'lowest_price': (market_stats or {}).get('lowest_price'),
+                'median_price': (market_stats or {}).get('median_price'),
+                'currency': (market_stats or {}).get('lowest_price', {}).get('currency')
+            }
+
+            # opzionale: breve riassunto per UI
+            result['summary'] = {
+                'prezzo_medio_suggerito': (price_stats or {}).get('avg'),
+                'annunci_attivi': (result['market_stats'] or {}).get('num_for_sale'),
+                'currency': (price_stats or {}).get('currency') or (result['market_stats'] or {}).get('currency')
+            }
+
+            return jsonify(result), 200
+
+        except requests.HTTPError as e:
+            result['error'] = f"HTTP {e.response.status_code}: {e.response.text[:300]}"
             return jsonify(result), 200
         except Exception as e:
             result['error'] = str(e)
             return jsonify(result), 200
+
 
     @app.route('/api/lego-estimate')
     @require_login
