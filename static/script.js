@@ -216,10 +216,18 @@ function initApp() {
                 // Prezzo in valuta di riferimento può essere opzionale; aggiungilo comunque
                 const refVal = document.getElementById('purchasePriceRef').value;
                 formData.append('purchase_price_curr_ref', refVal);
-                try{ const mp = collectMarketParams(); if (Object.keys(mp).length) formData.append('market_params', JSON.stringify(mp)); }catch(e){}
-                if (imageInput.files && imageInput.files[0]) {
+                try{
+                    const mp = getMarketParamsForSubmit();
+                    if (Object.keys(mp).length) formData.append('market_params', JSON.stringify(mp));
+                }
+                catch(e)
+                {}
+                
+                if (imageInput.files && imageInput.files[0])
+                {
                     formData.append('image', imageInput.files[0]);
                 }
+                
                 res = await fetch(`/api/items/${id}`, {
                     method: 'PUT',
                     body: formData
@@ -1170,17 +1178,20 @@ const MARKET_HINTS_SCHEMA = {
     {key:'number', label:'Numero', placeholder:'es. 4/102', tip:'Numero carta' },
     {key:'language', label:'Lingua', placeholder:'es. ITA/ENG/JP', tip:'Lingua' },
     {key:'printing', label:'Finitura', placeholder:'Normal / Foil', tip:'Normal / Foil / 1st Edition / Unlimited' },
-    {key:'tcgplayer_id', label:'TCGplayer ID', placeholder:'es. 123456', tip:'ID diretto per lookup preciso' }
+    {key:'tcgplayer_id', label:'TCGplayer ID', placeholder:'es. 123456', tip:'ID diretto per lookup preciso' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
   ],
   'videogame': [
     {key:'platform', label:'Piattaforma', placeholder:'es. PS2, SNES', tip:'Piattaforma/console' },
     {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' },
     {key:'edition', label:'Edizione', placeholder:'Standard / Limited', tip:'Edizione o variant' },
-    {key:'pricecharting_id', label:'PriceCharting ID', placeholder:'es. 12345', tip:'ID diretto se noto' }
+    {key:'pricecharting_id', label:'PriceCharting ID', placeholder:'es. 12345', tip:'ID diretto se noto' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
   ],
   'console': [
     {key:'platform', label:'Piattaforma', placeholder:'es. Nintendo Switch', tip:'Console piattaforma' },
-    {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' }
+    {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
   ],
   'sneakers': [
     {key:'brand', label:'Brand', placeholder:'Nike / Adidas', tip:'Marca' },
@@ -1188,34 +1199,78 @@ const MARKET_HINTS_SCHEMA = {
     {key:'colorway', label:'Colorway', placeholder:'es. Panda', tip:'Colorway' },
     {key:'sku', label:'SKU', placeholder:'es. DD1391-100', tip:'Codice prodotto' },
     {key:'size', label:'Taglia', placeholder:'US 9 / EU 42.5', tip:'Taglia' },
-    {key:'stockx_url_key', label:'StockX URL Key', placeholder:'es. nike-dunk-low-retro-white-black', tip:'Slug univoco' }
+    {key:'stockx_url_key', label:'StockX URL Key', placeholder:'es. nike-dunk-low-retro-white-black', tip:'Slug univoco' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
   ],
   'vinyl': [
     {key:'artist', label:'Artista', placeholder:'es. Pink Floyd', tip:'Artista' },
     {key:'album', label:'Album', placeholder:'es. The Dark Side...', tip:'Titolo' },
     {key:'year', label:'Anno', placeholder:'es. 1973', tip:'Anno uscita' },
-    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 1234567', tip:'ID release Discogs' }
+    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 1234567', tip:'ID release Discogs' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
   ],
   'cd': [
     {key:'artist', label:'Artista', placeholder:'es. Daft Punk', tip:'Artista' },
     {key:'album', label:'Album', placeholder:'es. Discovery', tip:'Titolo' },
     {key:'year', label:'Anno', placeholder:'es. 2001', tip:'Anno uscita' },
-    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 7654321', tip:'ID release Discogs' }
+    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 7654321', tip:'ID release Discogs' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
   ],
   'lego': [
     {key:'set_number', label:'Set Number', placeholder:'es. 75336', tip:'Codice set LEGO' },
     {key:'theme', label:'Tema', placeholder:'es. Star Wars', tip:'Tema' },
-    {key:'year', label:'Anno', placeholder:'es. 2022', tip:'Anno uscita' }
+    {key:'year', label:'Anno', placeholder:'es. 2022', tip:'Anno uscita' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
   ],
   'default': [
     {key:'brand', label:'Brand', placeholder:'', tip:'Marca' },
-    {key:'model', label:'Modello', placeholder:'', tip:'Modello' }
+    {key:'model', label:'Modello', placeholder:'', tip:'Modello' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
   ]
 };
 
 
-
 function renderMarketParamsFields(existing){
+    const wrap = document.getElementById('marketParamsFields');
+    if (!wrap) return;
+  
+    const catRaw = document.getElementById('itemCategory')?.value || '';
+    const catKey = normalizeCategory(catRaw);
+    wrap.innerHTML = ''
+    
+    const div = document.createElement('div');
+    div.className = 'field';
+
+    const labelType = document.createElement('label');
+    labelType.title = 'Type';
+    labelType.textContent = 'Type';
+
+    const selectType = document.createElement('select');
+    selectType.id = 'selectType';
+    const optEAN = document.createElement('option');
+    optEAN.value = 'EAN';
+    optEAN.text = 'EAN';
+    const optDMG = document.createElement('option');
+    optDMG.value = 'DMG';
+    optDMG.text = 'DMG';
+    selectType.append(optEAN,optDMG);
+
+    const labelSerial = document.createElement('label');
+    labelSerial.title = 'Serial';
+    labelSerial.textContent = 'Serial';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'inputSerial';
+    //input.placeholder = f.placeholder || '';
+    //input.value = val || '';
+
+    div.append(labelType,selectType,labelSerial, input);
+    wrap.appendChild(div);
+
+}
+
+function renderMarketParamsFields_field(existing){
   const wrap = document.getElementById('marketParamsFields');
   if (!wrap) return;
 
@@ -1287,3 +1342,102 @@ function normalizeCategory(cat){
   return 'default';
 }
 
+
+let _resolvedMarketParams = null; // cache risoluzione corrente
+
+function inferPlatformFromCode(codeType, codeValue, category){
+  const c = (category||'').toLowerCase();
+  if (codeType === 'DMG') return 'Game Boy';
+  if (c.includes('videog') || c.includes('video')) return 'Game Boy'; // fallback per il nostro primo step
+  return '';
+}
+
+function showResolvedBox(summaryPills, sourceText){
+  const box = document.getElementById('codeResolveResult');
+  const sum = document.getElementById('codeResolvedSummary');
+  const src = document.getElementById('codeResolvedSource');
+  if (!box || !sum || !src) return;
+  sum.innerHTML = summaryPills.join(' ');
+  src.textContent = sourceText || '';
+  box.style.display = 'block';
+}
+
+async function resolveCodeToMarketParams(){
+  const codeType = (document.getElementById('codeTypeSelect')?.value || '').trim().toUpperCase();
+  const code = (document.getElementById('codeValueInput')?.value || '').trim();
+  const category = (document.getElementById('itemCategory')?.value || '').trim();
+
+  if (!codeType || !code){
+    alert('Seleziona tipo codice e inserisci un valore.');
+    return;
+  }
+  // per ora partiamo sui videogiochi (Game Boy). Invieremo platform dedotta.
+  const platform = inferPlatformFromCode(codeType, code, category);
+
+  const body = { category, code_type: codeType, code: code, platform };
+  const r = await fetch('/api/code-resolve', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  const js = await r.json();
+
+  if (js.error){
+    _resolvedMarketParams = null;
+    showResolvedBox([`<span class="pill">Nessun risultato</span>`], js.query ? `Fonte: ${js.query.source||''}` : '');
+    return;
+  }
+
+  // Salva market_params risolti (li applicheremo su richiesta)
+  _resolvedMarketParams = js.normalized?.market_params || {};
+
+  // UI breve: nome, piattaforma, anno, id sorgente
+  const pills = [];
+  if (js.normalized?.title) pills.push(`<span class="pill"><strong>Titolo</strong> ${js.normalized.title}</span>`);
+  if (js.normalized?.platform) pills.push(`<span class="pill"><strong>Piattaforma</strong> ${js.normalized.platform}</span>`);
+  if (js.normalized?.year) pills.push(`<span class="pill"><strong>Anno</strong> ${js.normalized.year}</span>`);
+  if (js.normalized?.region) pills.push(`<span class="pill"><strong>Regione</strong> ${js.normalized.region}</span>`);
+  if (js.normalized?.pricecharting_id) pills.push(`<span class="pill"><strong>PC ID</strong> ${js.normalized.pricecharting_id}</span>`);
+  if (_resolvedMarketParams?.serial) pills.push(`<span class="pill"><strong>Serial</strong> ${_resolvedMarketParams.serial}</span>`);
+
+  const source = js.query ? `Fonte: ${js.query.source || 'PriceCharting'} — ${js.query.note||''}` : 'Fonte: PriceCharting';
+  showResolvedBox(pills, source);
+}
+
+// Applica i parametri risolti ai campi dell’item (nome/categoria + market_params)
+function applyResolvedToForm(){
+  if (!_resolvedMarketParams) return;
+
+  // Nome: se vuoto o se vuoi forzare, aggiorna
+  const nameEl = document.getElementById('itemName');
+  if (nameEl && (!nameEl.value || nameEl.value.trim()==='') && window.lastResolveNormalized?.title){
+    nameEl.value = window.lastResolveNormalized.title;
+  }
+
+  // Categoria → Videogiochi se coerente
+  const catEl = document.getElementById('itemCategory');
+  if (catEl && _resolvedMarketParams.platform && !catEl.value){
+    catEl.value = 'videogames';
+  }
+
+  // Salva i market_params risolti (verranno inviati in create/update)
+  window.resolvedMarketParamsForSubmit = _resolvedMarketParams;
+  alert('Parametri risolti applicati. Salva l’item per mantenerli.');
+}
+
+// Hook pulsanti nella modale
+document.addEventListener('click', (e)=>{
+  if (e.target && e.target.id === 'btnResolveCode'){ e.preventDefault(); resolveCodeToMarketParams(); }
+  if (e.target && e.target.id === 'btnApplyResolved'){ e.preventDefault(); applyResolvedToForm(); }
+});
+
+// Al submit, se abbiamo parametri risolti, usali
+// — se salvi con JSON: payload.market_params = JSON.stringify(...)
+// — se salvi multipart: formData.append('market_params', JSON.stringify(...))
+
+// Esempio (adatta ai tuoi metodi esistenti):
+function getMarketParamsForSubmit(){
+  // se abbiamo già un flusso nuovo, usalo
+  if (window.resolvedMarketParamsForSubmit) return window.resolvedMarketParamsForSubmit;
+  // fallback: se hai ancora collectMarketParams(), puoi usarlo:
+  if (typeof collectMarketParams === 'function') return collectMarketParams();
+  return {};
+}
