@@ -100,6 +100,39 @@ def create_app(db_path: str = "database.db") -> Flask:
             )
             """
         )
+
+        # === GLOBAL CATALOG ===
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS global_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            catalog_key TEXT UNIQUE,              -- chiave univoca dedotta (es. discogs:12345, lego:75336, ean:...)
+            canonical_name TEXT NOT NULL,         -- nome canonico (es. Artist - Album, o Nome set, ecc.)
+            category TEXT,                        -- categoria (vinyl, cd, videogames, sneakers, lego, trading card, ...)
+            identifiers TEXT,                     -- JSON (discogs_release_id, ean/upc, sku, set_number, stockx_slug, tcgplayer_id, catno/label, ...)
+            market_params TEXT,                   -- JSON: stessi campi che usi per le ricerche
+            info_links TEXT,                      -- JSON array di link descrittivi (wiki, discogs url, ecc.)
+            created_at TEXT,
+            updated_at TEXT
+        );
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS global_catalog_prices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            global_id INTEGER NOT NULL,
+            ref_date TEXT NOT NULL,              -- YYYY-MM-DD (giorno di riferimento)
+            source TEXT,                         -- 'discogs' | 'ebay' | 'pricecharting' | 'stockx' | 'justtcg' | ...
+            samples_count INTEGER,
+            avg REAL,
+            median REAL,
+            min REAL,
+            max REAL,
+            query TEXT,                          -- JSON della query/fonte usata
+            created_at TEXT,
+            UNIQUE(global_id, ref_date, source)  -- un record al giorno per fonte
+        );
+        """)
+        
         # eBay price history per-item (one record per day)
         cur.execute(
             """
@@ -134,7 +167,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('fair_value', 'REAL'),
             ('price_p05', 'REAL'),
             ('price_p95', 'REAL'),
-            ('valuation_date', 'TEXT')
+            ('valuation_date', 'TEXT'),
+            ('global_id', 'INTEGER')
         ]:
             try:
                 cur.execute(f"ALTER TABLE items ADD COLUMN {column} {col_type}")
@@ -622,7 +656,100 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.commit()
         item_id = cur.lastrowid
         conn.close()
+        # verifica se valido ed esiste già in global_catalog
+        if(data.get('market_params') and data.get('category')):
+            ensure_global_by_serial(data.get('market_params'),data.get('category'))
         return jsonify({'id': item_id}), 201
+
+    def ensure_global_by_serial(market_params,category) -> int:
+        
+        #if not serial or not str(serial).strip():
+            #raise ValueError("serial è obbligatorio")
+        
+        jl = json.loads(market_params)
+        jl.get('serial_number')
+        serial = str(jl.get('serial_number')).strip()
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+        err = False
+
+        # 1) SELECT (prima con json_extract se disponibile, altrimenti fallback LIKE)
+        found = None
+        try:
+            # Tentativo con JSON1
+            cur.execute("""
+                SELECT id FROM global_catalog
+                WHERE json_extract(market_params, '$.serial') = ?
+                OR catalog_key = ?
+                LIMIT 1
+            """, (serial, f"serial:{serial}"))
+            found = cur.fetchone()
+        except sqlite3.OperationalError:
+            # Fallback senza JSON1
+            like = f'%\"serial\":\"{serial}\"%'
+            cur.execute("""
+                SELECT id FROM global_catalog
+                WHERE market_params LIKE ?
+                OR catalog_key = ?
+                LIMIT 1
+            """, (like, f"serial:{serial}"))
+            found = cur.fetchone()
+        except Exception as e:
+            print(e)
+            err = True
+
+        if found or err :
+            conn.close()
+            return found['id'] if isinstance(found, dict) else found[0]
+
+        # 2) INSERT (se non trovato)
+        now = datetime.utcnow().isoformat()
+
+        # prepara payload coerente
+        idents = dict({})
+        idents['serial'] = serial
+        try:
+            mp = dict(jl or {})
+            mp.setdefault('serial', serial)
+        except Exception as e:
+            print(e)
+
+        links = list([])
+
+        # catalog_key univoca basata su serial
+        catalog_key = f"serial:{serial}"
+
+        try:
+            cur.execute("""
+                INSERT INTO global_catalog
+                    (catalog_key, canonical_name, category, identifiers, market_params, info_links, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                catalog_key,
+                serial.strip(),
+                (category or '').strip() or None,
+                json.dumps(idents, ensure_ascii=False),
+                json.dumps(mp, ensure_ascii=False),
+                json.dumps(links, ensure_ascii=False),
+                now, now
+            ))
+            gid = cur.lastrowid
+            conn.commit()
+            conn.close()
+            return gid
+        except sqlite3.IntegrityError:
+            # In caso di race condition sul UNIQUE(catalog_key), rileggo
+            try:
+                cur.execute("SELECT id FROM global_catalog WHERE catalog_key = ? LIMIT 1", (catalog_key,))
+                row = cur.fetchone()
+                conn.close()
+                if row:
+                    return row['id'] if isinstance(row, dict) else row[0]
+                raise
+            except Exception:
+                conn.close()
+                raise
 
     @app.route('/api/items/<int:item_id>', methods=['PUT'])
     @require_login
@@ -630,6 +757,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         """
         Update an existing item by ID. Expects JSON body with fields to update.
         """
+        mp = ''
+        cat = ''
         if request.content_type and request.content_type.startswith('multipart/form-data'):
             # Update via form (potentially with image)
             form = request.form
@@ -656,6 +785,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             }
             # Compute purchase_price_curr_ref automatically if not provided but purchase_price and currency are present
             try:
+                mp = form.get('market_params')
+                cat = mapping.get('category')
                 if mapping.get('purchase_price_curr_ref') is None and mapping.get('purchase_price') is not None:
                     # fetch user's reference currency
                     user_ref = None
@@ -706,6 +837,9 @@ def create_app(db_path: str = "database.db") -> Flask:
                 return jsonify({'error': 'Item not found or unauthorized'}), 404
             conn.commit()
             conn.close()
+            # verifica se valido ed esiste già in global_catalog
+            if(mp and cat):
+                ensure_global_by_serial(mp,cat)
             return jsonify({'message': 'Item updated'})
         else:
             data = request.get_json() or {}
@@ -716,6 +850,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 if key in data and data[key] is not None:
                     fields.append(f"{key} = ?")
                     values.append(data[key])
+            mp = data.get('market_params') 
+            cat = data.get('category')                 
             # If purchase_price changes and no converted price provided, compute automatically
             try:
                 if ('purchase_price_curr_ref' not in data or data.get('purchase_price_curr_ref') is None) and data.get('purchase_price') is not None:
@@ -754,6 +890,9 @@ def create_app(db_path: str = "database.db") -> Flask:
                 return jsonify({'error': 'Item not found or unauthorized'}), 404
             conn.commit()
             conn.close()
+            # verifica se valido ed esiste già in global_catalog
+            if(mp and cat):
+                ensure_global_by_serial(mp,cat)
             return jsonify({'message': 'Item updated'})
 
     @app.route('/api/items/<int:item_id>', methods=['DELETE'])
@@ -1190,115 +1329,6 @@ def create_app(db_path: str = "database.db") -> Flask:
             is_admin = user_dict.get('username') == 'admin'
             return render_template('profile.html', user=user_dict, stats=stats, is_admin=is_admin)
 
-    @app.route('/api/ebay-estimate-old')
-    @require_login
-    def ebay_estimate_old():
-        """Stima prezzo a mercato dai venduti recenti su eBay (Finding API)."""
-        item_id = request.args.get('item_id', type=int)
-        if not item_id:
-            return jsonify({'error': 'Missing item_id'}), 400
-
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
-        row = cur.fetchone()
-        conn.close()
-        if not row:
-            return jsonify({'error': 'Item not found'}), 404
-
-        item = dict(row)
-
-        # Costruzione keywords: nome + lingua + categoria + condizione
-        keywords_parts = [item.get('name') or '']
-        if item.get('language'):   keywords_parts.append(item['language'])
-        if item.get('category'):   keywords_parts.append(item['category'])
-        if item.get('condition'):  keywords_parts.append(item['condition'])
-        keywords = " ".join([k for k in keywords_parts if k]).strip() or "collectible"
-
-        import os, requests, statistics
-        EBAY_APP_ID = os.environ.get("EBAY_CLIENT_ID")
-        site_id = os.getenv('EBAY_SITE_ID', '101')  # 101 = Italy, 0 = US
-
-        payload = {
-            'OPERATION-NAME': 'findCompletedItems',
-            'SERVICE-VERSION': '1.13.0',
-            'SECURITY-APPNAME': EBAY_APP_ID or '',
-            'RESPONSE-DATA-FORMAT': 'JSON',
-            'REST-PAYLOAD': 'true',
-            'keywords': keywords,
-            'paginationInput.entriesPerPage': '25',
-            'itemFilter(0).name': 'SoldItemsOnly',
-            'itemFilter(0).value': 'true',
-            'siteid': site_id,
-        }
-        url = 'https://svcs.ebay.com/services/search/FindingService/v1'
-
-        result = {
-            'source': 'eBay Finding API - findCompletedItems',
-            'query': {'url': url, 'params': payload},
-            'stats': None,
-            'samples': []
-        }
-
-        try:
-            if not EBAY_APP_ID:
-                raise RuntimeError('Missing EBAY_APP_ID')
-
-            r = requests.get(url, params=payload, timeout=8)
-            r.raise_for_status()
-            data = r.json()
-
-            items = (((data or {}).get('findCompletedItemsResponse') or [{}])[0]
-                    .get('searchResult') or [{}])[0].get('item', [])
-
-            prices, samples = [], []
-            currency = 'EUR'
-            for it in items:
-                selling = ((it.get('sellingStatus') or [{}])[0])
-                state   = (selling.get('sellingState') or [''])[0]
-                if state != 'EndedWithSales':    # solo effettivamente venduti
-                    continue
-
-                curr_price = ((selling.get('currentPrice') or [{}])[0])
-                price_val  = float(curr_price.get('__value__', '0') or 0)
-                currency   = curr_price.get('@currencyId', currency)
-
-                # Se disponibile, usa il prezzo convertito
-                conv = (selling.get('convertedCurrentPrice') or [{}])[0]
-                if conv and conv.get('__value__'):
-                    price_val = float(conv.get('__value__', price_val) or price_val)
-                    currency  = conv.get('@currencyId', currency)
-
-                title    = (it.get('title') or [''])[0]
-                view_url = (it.get('viewItemURL') or [''])[0]
-                end_time = (((it.get('listingInfo') or [{}])[0]).get('endTime') or [''])[0]
-
-                prices.append(price_val)
-                if len(samples) < 5:
-                    samples.append({'title': title, 'price': price_val, 'currency': currency,
-                                    'url': view_url, 'endTime': end_time})
-
-            if not prices:
-                result['stats'] = {'count': 0}
-            else:
-                avg = sum(prices)/len(prices)
-                med = statistics.median(prices)
-                mn, mx = min(prices), max(prices)
-                result['stats']   = {'count': len(prices), 'avg': round(avg,2), 'median': round(med,2),
-                                    'min': round(mn,2), 'max': round(mx,2), 'currency': currency}
-                result['samples'] = samples
-
-            return jsonify(result), 200
-
-        except Exception:
-            # Fallback se manca la key o non raggiungo eBay:
-            base = float(item.get('purchase_price') or 0) or 50.0
-            est  = base * 1.1
-            result['stats'] = {'count': 0, 'avg': round(est,2), 'median': round(est,2),
-                            'min': round(base*0.9,2), 'max': round(base*1.3,2),
-                            'currency': item.get('currency') or 'EUR', 'stub': True}
-            return jsonify(result)
-
     @app.route('/api/ebay-estimate')
     @require_login
     def ebay_estimate():
@@ -1471,8 +1501,6 @@ def create_app(db_path: str = "database.db") -> Flask:
             base_val = float(item.get('purchase_price') or 0) or None
             result['prices'] = {'loose': base_val, 'currency': item.get('currency') or 'EUR', 'stub': True}
             return jsonify(result), 200
-
-
 
     @app.route('/api/discogs-estimate')
     @require_login
@@ -1731,7 +1759,6 @@ def create_app(db_path: str = "database.db") -> Flask:
         except Exception as e:
             result['error'] = str(e)
             return jsonify(result), 200
-
 
     @app.route('/api/lego-estimate')
     @require_login
@@ -2028,9 +2055,138 @@ def create_app(db_path: str = "database.db") -> Flask:
             market={'lastSale': base_val*1.05, 'lowestAsk': base_val*1.1, 'highestBid': base_val*0.95}
             result['market']=market; result['stats']=_stats(market)
         return jsonify(result), 200
+        """
+    def ensure_global_by_serial(serial: str, *, canonical_name: str, category: str = None,
+                                market_params: dict = None, identifiers: dict = None,
+                                info_links: list = None) -> int:
+        
+        Cerca nel global_catalog per 'serial' (in identifiers/market_params o catalog_key),
+        se non esiste inserisce un nuovo record e ritorna l'id.
+        """
+
+    @app.route('/api/code-resolve', methods=['POST'])
+    @require_login
+    def api_code_resolve():
+        """
+        Risolve 'code_type' + 'code' per ottenere market_params normalizzati,
+        puntando (per ora) a PriceCharting (videogiochi, focus Game Boy).
+        Body: { category, code_type, code, platform? }
+        """
+        import os, requests, datetime as dt
+
+        data = request.get_json(silent=True) or {}
+        category = (data.get('category') or '').lower()
+        code_type = (data.get('code_type') or '').upper()
+        code = (data.get('code') or '').strip()
+        platform = (data.get('platform') or '').strip()
+
+        if not code_type or not code:
+            return jsonify({'error': 'Missing code_type or code'}), 400
+
+        # Sorgente
+        token = os.getenv('PRICECHARTING_TOKEN') or os.getenv('PRICE_CHARTING_TOKEN') or 'demo'
+
+        # Costruzione query verso PriceCharting
+        # 1) se EAN/UPC → endpoint "product by barcode"
+        # 2) se DMG/Serial → search q=... + console=Game Boy (se dedotta)
+        # NB: gli endpoint possono variare: adattati alla tua implementazione corrente
+        base = "https://www.pricecharting.com/api"
+        query_used = {'source': 'PriceCharting'}
+
+        try:
+            normalized = {'title': None, 'platform': None, 'year': None, 'region': None, 'market_params': {}}
+
+            def to_year(s):
+                try:
+                    if not s: return None
+                    return int(str(s)[:4])
+                except Exception:
+                    return None
+
+            # 1) Barcode diretto
+            if code_type in ('EAN','UPC'):
+                url = f"{base}/product"
+                params = {'t': token, 'barcode': code}
+                r = requests.get(url, params=params, timeout=12)
+                query_used.update({'endpoint': 'product', 'params': {'barcode': code}})
+                r.raise_for_status()
+                p = r.json() if r.text else None
+                if not p or not isinstance(p, dict):
+                    return jsonify({'error':'Nessun prodotto per barcode', 'query': query_used}), 200
+
+                normalized['title'] = p.get('product-name') or p.get('title')
+                normalized['platform'] = p.get('console-name') or p.get('console')
+                normalized['year'] = to_year(p.get('release-date'))
+                normalized['region'] = p.get('region')
+
+                market_params = {
+                    'platform': normalized['platform'],
+                    'title': normalized['title'],
+                    'year': normalized['year'],
+                    'region': normalized['region'],
+                    'barcode': code,
+                    'serial': code,   # memorizziamo anche in serial per coerenza schema
+                    'pricecharting_id': p.get('id')
+                }
+                normalized['market_params'] = {k:v for k,v in market_params.items() if v not in (None,'')}
+                return jsonify({'normalized': normalized, 'query': query_used})
+
+            # 2) DMG / SERIAL → search
+            # Deduci console “Game Boy” per DMG
+            console = platform or ('Game Boy' if code_type == 'DMG' else '')
+            url = f"{base}/search"
+            params = {'t': token, 'q': code}
+            if console: params['console'] = console
+            r = requests.get(url, params=params, timeout=12)
+            query_used.update({'endpoint': 'search', 'params': {'q': code, 'console': console or None}})
+
+            r.raise_for_status()
+            arr = r.json() if r.text else []
+            if not arr:
+                return jsonify({'error':'Nessun risultato dalla ricerca', 'query': query_used}), 200
+
+            # pick best (primo)
+            top = arr[0] if isinstance(arr, list) else None
+            if not top or not isinstance(top, dict):
+                return jsonify({'error':'Risultato inaspettato', 'query': query_used}), 200
+
+            # eventuale dettaglio prodotto
+            prod_id = top.get('id')
+            if prod_id:
+                url2 = f"{base}/products"
+                r2 = requests.get(url2, params={'t': token, 'id': prod_id}, timeout=12)
+                # /products può restituire array o singolo — gestiamo entrambi
+                det = r2.json() if r2.text else {}
+                p = (det[0] if isinstance(det, list) and det else (det if isinstance(det, dict) else {}))
+            else:
+                p = top
+
+            normalized['title']    = p.get('product-name') or p.get('title') or top.get('title')
+            normalized['platform'] = p.get('console-name') or p.get('console') or console or 'Game Boy'
+            normalized['year']     = to_year(p.get('release-date'))
+            normalized['region']   = p.get('region')
+
+            market_params = {
+                'platform': normalized['platform'],
+                'title': normalized['title'],
+                'year': normalized['year'],
+                'region': normalized['region'],
+                'serial': code,  # <— qui salviamo il DMG o serial generico
+                'pricecharting_id': p.get('id') or top.get('id')
+            }
+            normalized['market_params'] = {k:v for k,v in market_params.items() if v not in (None,'')}
+
+            # conserva per il pulsante "Applica"
+            return jsonify({'normalized': normalized, 'query': query_used})
+
+        except requests.HTTPError as e:
+            return jsonify({'error': f"HTTP {e.response.status_code}: {e.response.text[:160]}", 'query': query_used}), 200
+        except Exception as e:
+            return jsonify({'error': str(e), 'query': query_used}), 200
+
+
 
     return app
-
 
 if __name__ == '__main__':
     # When executed directly, run the app on localhost for development
