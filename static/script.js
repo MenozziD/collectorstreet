@@ -217,7 +217,7 @@ function initApp() {
                 const refVal = document.getElementById('purchasePriceRef').value;
                 formData.append('purchase_price_curr_ref', refVal);
                 try{
-                    const mp = getMarketParamsForSubmit();
+                    const mp = collectMarketParams();
                     if (Object.keys(mp).length) formData.append('market_params', JSON.stringify(mp));
                 }
                 catch(e)
@@ -1233,76 +1233,43 @@ const MARKET_HINTS_SCHEMA = {
 function renderMarketParamsFields(existing){
     const wrap = document.getElementById('marketParamsFields');
     if (!wrap) return;
-  
+
     const catRaw = document.getElementById('itemCategory')?.value || '';
     const catKey = normalizeCategory(catRaw);
-    wrap.innerHTML = ''
-    
-    const div = document.createElement('div');
-    div.className = 'field';
+    const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
 
-    const labelType = document.createElement('label');
-    labelType.title = 'Type';
-    labelType.textContent = 'Type';
+    // Valori esistenti (object) se passati o presi dai campi attuali
+    const existingObj = existing ? parseMarketParams(existing) : collectMarketParams();
 
-    const selectType = document.createElement('select');
-    selectType.id = 'selectType';
-    const optEAN = document.createElement('option');
-    optEAN.value = 'EAN';
-    optEAN.text = 'EAN';
-    const optDMG = document.createElement('option');
-    optDMG.value = 'DMG';
-    optDMG.text = 'DMG';
-    selectType.append(optEAN,optDMG);
+    wrap.innerHTML = '';
+    schema.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'field';
 
-    const labelSerial = document.createElement('label');
-    labelSerial.title = 'Serial';
-    labelSerial.textContent = 'Serial';
+        const inputId = 'mp_' + f.key;
+        const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.id = 'inputSerial';
-    //input.placeholder = f.placeholder || '';
-    //input.value = val || '';
+        const label = document.createElement('label');
+        label.htmlFor = inputId;
+        label.title = f.tip || '';
+        label.textContent = f.label;
 
-    div.append(labelType,selectType,labelSerial, input);
-    wrap.appendChild(div);
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = inputId;
+        input.placeholder = f.placeholder || '';
+        input.value = val || '';
 
-}
+        div.append(label, input);
+        wrap.appendChild(div);    
+    });
 
-function renderMarketParamsFields_field(existing){
-  const wrap = document.getElementById('marketParamsFields');
-  if (!wrap) return;
-
-  const catRaw = document.getElementById('itemCategory')?.value || '';
-  const catKey = normalizeCategory(catRaw);
-  const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
-
-  // Valori esistenti (object) se passati o presi dai campi attuali
-  const existingObj = existing ? parseMarketParams(existing) : collectMarketParams();
-
-  wrap.innerHTML = '';
-  schema.forEach(f => {
-    const div = document.createElement('div');
-    div.className = 'field';
-
-    const inputId = 'mp_' + f.key;
-    const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
-
-    const label = document.createElement('label');
-    label.htmlFor = inputId;
-    label.title = f.tip || '';
-    label.textContent = f.label;
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.id = inputId;
-    input.placeholder = f.placeholder || '';
-    input.value = val || '';
-
-    div.append(label, input);
-    wrap.appendChild(div);
-  });
+    const infoLink = document.createElement('input');
+    infoLink.type = 'url';
+    infoLink.id = 'infoLink';
+    infoLink.placeholder = 'Link info';
+    infoLink.title='Link info — URL pagina info di riferimento.';
+    infoLink.value = val || '';
 }
 
 function collectMarketParams(){
@@ -1340,104 +1307,4 @@ function normalizeCategory(cat){
     return CATEGORY_ALIASES[k];
   }
   return 'default';
-}
-
-
-let _resolvedMarketParams = null; // cache risoluzione corrente
-
-function inferPlatformFromCode(codeType, codeValue, category){
-  const c = (category||'').toLowerCase();
-  if (codeType === 'DMG') return 'Game Boy';
-  if (c.includes('videog') || c.includes('video')) return 'Game Boy'; // fallback per il nostro primo step
-  return '';
-}
-
-function showResolvedBox(summaryPills, sourceText){
-  const box = document.getElementById('codeResolveResult');
-  const sum = document.getElementById('codeResolvedSummary');
-  const src = document.getElementById('codeResolvedSource');
-  if (!box || !sum || !src) return;
-  sum.innerHTML = summaryPills.join(' ');
-  src.textContent = sourceText || '';
-  box.style.display = 'block';
-}
-
-async function resolveCodeToMarketParams(){
-  const codeType = (document.getElementById('codeTypeSelect')?.value || '').trim().toUpperCase();
-  const code = (document.getElementById('codeValueInput')?.value || '').trim();
-  const category = (document.getElementById('itemCategory')?.value || '').trim();
-
-  if (!codeType || !code){
-    alert('Seleziona tipo codice e inserisci un valore.');
-    return;
-  }
-  // per ora partiamo sui videogiochi (Game Boy). Invieremo platform dedotta.
-  const platform = inferPlatformFromCode(codeType, code, category);
-
-  const body = { category, code_type: codeType, code: code, platform };
-  const r = await fetch('/api/code-resolve', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
-  });
-  const js = await r.json();
-
-  if (js.error){
-    _resolvedMarketParams = null;
-    showResolvedBox([`<span class="pill">Nessun risultato</span>`], js.query ? `Fonte: ${js.query.source||''}` : '');
-    return;
-  }
-
-  // Salva market_params risolti (li applicheremo su richiesta)
-  _resolvedMarketParams = js.normalized?.market_params || {};
-
-  // UI breve: nome, piattaforma, anno, id sorgente
-  const pills = [];
-  if (js.normalized?.title) pills.push(`<span class="pill"><strong>Titolo</strong> ${js.normalized.title}</span>`);
-  if (js.normalized?.platform) pills.push(`<span class="pill"><strong>Piattaforma</strong> ${js.normalized.platform}</span>`);
-  if (js.normalized?.year) pills.push(`<span class="pill"><strong>Anno</strong> ${js.normalized.year}</span>`);
-  if (js.normalized?.region) pills.push(`<span class="pill"><strong>Regione</strong> ${js.normalized.region}</span>`);
-  if (js.normalized?.pricecharting_id) pills.push(`<span class="pill"><strong>PC ID</strong> ${js.normalized.pricecharting_id}</span>`);
-  if (_resolvedMarketParams?.serial) pills.push(`<span class="pill"><strong>Serial</strong> ${_resolvedMarketParams.serial}</span>`);
-
-  const source = js.query ? `Fonte: ${js.query.source || 'PriceCharting'} — ${js.query.note||''}` : 'Fonte: PriceCharting';
-  showResolvedBox(pills, source);
-}
-
-// Applica i parametri risolti ai campi dell’item (nome/categoria + market_params)
-function applyResolvedToForm(){
-  if (!_resolvedMarketParams) return;
-
-  // Nome: se vuoto o se vuoi forzare, aggiorna
-  const nameEl = document.getElementById('itemName');
-  if (nameEl && (!nameEl.value || nameEl.value.trim()==='') && window.lastResolveNormalized?.title){
-    nameEl.value = window.lastResolveNormalized.title;
-  }
-
-  // Categoria → Videogiochi se coerente
-  const catEl = document.getElementById('itemCategory');
-  if (catEl && _resolvedMarketParams.platform && !catEl.value){
-    catEl.value = 'videogames';
-  }
-
-  // Salva i market_params risolti (verranno inviati in create/update)
-  window.resolvedMarketParamsForSubmit = _resolvedMarketParams;
-  alert('Parametri risolti applicati. Salva l’item per mantenerli.');
-}
-
-// Hook pulsanti nella modale
-document.addEventListener('click', (e)=>{
-  if (e.target && e.target.id === 'btnResolveCode'){ e.preventDefault(); resolveCodeToMarketParams(); }
-  if (e.target && e.target.id === 'btnApplyResolved'){ e.preventDefault(); applyResolvedToForm(); }
-});
-
-// Al submit, se abbiamo parametri risolti, usali
-// — se salvi con JSON: payload.market_params = JSON.stringify(...)
-// — se salvi multipart: formData.append('market_params', JSON.stringify(...))
-
-// Esempio (adatta ai tuoi metodi esistenti):
-function getMarketParamsForSubmit(){
-  // se abbiamo già un flusso nuovo, usalo
-  if (window.resolvedMarketParamsForSubmit) return window.resolvedMarketParamsForSubmit;
-  // fallback: se hai ancora collectMarketParams(), puoi usarlo:
-  if (typeof collectMarketParams === 'function') return collectMarketParams();
-  return {};
 }
