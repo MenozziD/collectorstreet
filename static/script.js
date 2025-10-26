@@ -140,7 +140,6 @@ function initApp() {
     document.getElementById('salePrice')?.addEventListener('input', validateFields);
     document.getElementById('saleDate')?.addEventListener('change', validateFields);
     document.getElementById('quantity')?.addEventListener('input', validateFields);
-    document.getElementById('marketplaceLink')?.addEventListener('input', validateFields);
 
 // Eventi bottoni
     addItemBtn?.addEventListener('click', () => {
@@ -208,7 +207,8 @@ function initApp() {
                 formData.append('purchase_date', purchaseDate);
                 formData.append('sale_price', salePrice);
                 formData.append('sale_date', saleDate);
-                formData.append('marketplace_link', marketplaceLink);
+                formData.append('marketplace_links', JSON.stringify(stateMarketplaceLinks));
+                formData.append('info_links', JSON.stringify(stateInfoLinks));
                 formData.append('tags', tags);
                 formData.append('quantity', quantity);
                 formData.append('condition', conditionVal);
@@ -279,6 +279,47 @@ function initApp() {
     const currencySelectInput = document.getElementById('currency');
     purchasePriceInput.addEventListener('input', autoCalculateRefPrice);
     currencySelectInput.addEventListener('change', autoCalculateRefPrice);
+
+    // Aggiunte
+    document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'btnAddInfoLinkItem') {
+        e.preventDefault();
+        const inp = document.getElementById('infoLinkItemInput');
+        const url = (inp?.value || '').trim();
+        if (!url) return;
+        if (!/^https?:\/\//i.test(url)) { alert('Inserisci un URL che inizi con http:// o https://'); return; }
+        if (!stateInfoLinks.includes(url)) stateInfoLinks.push(url);
+        inp.value = '';
+        renderLinks(stateInfoLinks, 'infoLinksItemList');
+    }
+    if (e.target && e.target.id === 'btnAddMarketplaceLinkItem') {
+        e.preventDefault();
+        const inp = document.getElementById('marketplaceLinkItemInput');
+        const url = (inp?.value || '').trim();
+        if (!url) return;
+        if (!/^https?:\/\//i.test(url)) { alert('Inserisci un URL che inizi con http:// o https://'); return; }
+        if (!stateMarketplaceLinks.includes(url)) stateMarketplaceLinks.push(url);
+        inp.value = '';
+        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+    }
+    });
+
+    const _openModalOrig = window.openModal;
+    window.openModal = function(editItem = null){
+        if (typeof _openModalOrig === 'function') _openModalOrig.apply(this, arguments);
+
+        // inizializza stati
+        stateInfoLinks = Array.isArray(editItem?.info_links) ? [...editItem.info_links] : [];
+        stateMarketplaceLinks = Array.isArray(editItem?.marketplace_links) ? [...editItem.marketplace_links] : [];
+
+        renderLinks(stateInfoLinks, 'infoLinksItemList');
+        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+
+        // pulisci input
+        const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
+        const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
+    };
+
 }
 
 // Calcola automaticamente il prezzo di acquisto nella valuta di riferimento dell'utente
@@ -660,6 +701,8 @@ function openModal(item = null) {
 
 function closeModal() {
     const modal = document.getElementById('itemModal');
+    stateInfoLinks = [];
+    stateMarketplaceLinks = [];
     modal.classList.add('hidden');
 }
 
@@ -974,6 +1017,17 @@ function openViewModal(item){
     set('viewTags',         item.tags);
   (function(){ const el=document.getElementById('viewToken'); if (!el) return; if (item.token) { el.textContent=item.token; el.style.display='inline-flex'; } else { el.textContent=''; el.style.display='none'; } })();
 
+    // Info links (item level)
+    const infoLinksArr = Array.isArray(item.info_links) ? item.info_links : [];
+    renderLinkList(infoLinksArr, 'viewInfoLinks');
+
+    // Market links (item level) + fallback ad eventuale campo legacy
+    let marketArr = Array.isArray(item.marketplace_links) ? item.marketplace_links : [];
+    if ((!marketArr || marketArr.length === 0) && item.marketplaceLink && typeof item.marketplaceLink === 'string'){
+    marketArr = [item.marketplaceLink];
+    }
+    renderLinkList(marketArr, 'viewMarketplaceLinks');
+
     // Reset stima e apri
     document.getElementById('estContent').innerHTML = '<em>Caricamento stima in corso…</em>';
     document.getElementById('estSource').textContent = '';
@@ -1264,12 +1318,7 @@ function renderMarketParamsFields(existing){
         wrap.appendChild(div);    
     });
 
-    const infoLink = document.createElement('input');
-    infoLink.type = 'url';
-    infoLink.id = 'infoLink';
-    infoLink.placeholder = 'Link info';
-    infoLink.title='Link info — URL pagina info di riferimento.';
-    infoLink.value = val || '';
+
 }
 
 function collectMarketParams(){
@@ -1307,4 +1356,189 @@ function normalizeCategory(cat){
     return CATEGORY_ALIASES[k];
   }
   return 'default';
+}
+
+
+// ===== Global Catalog: Info Links =====
+function getCurrentGlobalId(){
+  const el = document.getElementById('globalId');
+  if (!el) return null;
+  const v = (el.value||'').trim();
+  return v ? parseInt(v,10) : null;
+}
+
+function renderInfoLinks(links){
+  const list = document.getElementById('infoLinksList');
+  if (!list) return;
+  list.innerHTML = '';
+  (links||[]).forEach((u, idx)=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<a href="${u}" target="_blank" rel="noopener">${u}</a> <button type="button" data-idx="${idx}" aria-label="Rimuovi">&times;</button>`;
+    list.appendChild(chip);
+  });
+  list.querySelectorAll('button[data-idx]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = parseInt(btn.getAttribute('data-idx'),10);
+      currentInfoLinks.splice(i,1);
+      renderInfoLinks(currentInfoLinks);
+    });
+  });
+}
+
+/* let currentInfoLinks = [];
+
+async function loadInfoLinksIfAny(){
+  const gid = getCurrentGlobalId();
+  const sect = document.getElementById('infoLinksSection');
+  if (!sect) return;
+  if (!gid){
+    sect.style.display = 'none';
+    currentInfoLinks = [];
+    renderInfoLinks(currentInfoLinks);
+    return;
+  }
+  sect.style.display = '';
+  try{
+    const r = await fetch(`/api/global-catalog/${gid}/info-links`);
+    const jsn = await r.json();
+    currentInfoLinks = jsn.links || [];
+  }catch(e){
+    currentInfoLinks = [];
+  }
+  renderInfoLinks(currentInfoLinks);
+} */
+
+/* document.addEventListener('click', (e)=>{
+  if (e.target && e.target.id === 'btnAddInfoLink'){
+    e.preventDefault();
+    const inp = document.getElementById('infoLinkInput');
+    if (!inp) return;
+    const url = (inp.value||'').trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)){ alert('Inserisci un URL che inizi con http:// o https://'); return; }
+    currentInfoLinks.push(url);
+    inp.value='';
+    renderInfoLinks(currentInfoLinks);
+  }
+  if (e.target && e.target.id === 'btnSaveInfoLinks'){
+    e.preventDefault();
+    saveInfoLinks();
+  }
+}); */
+
+async function saveInfoLinks(){
+  const gid = getCurrentGlobalId();
+  if (!gid){ alert('Collega prima un elemento del Catalogo Globale.'); return; }
+  try{
+    const r = await fetch(`/api/global-catalog/${gid}/info-links`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({links: currentInfoLinks})
+    });
+    const jsn = await r.json();
+    if (jsn.ok){ alert('Link salvati.'); } else { alert('Impossibile salvare i link.'); }
+  }catch(e){ alert('Errore salvataggio link.'); }
+}
+
+// Hook su openModal per caricare i link quando presente global_id
+/* (function(){
+  const _open = window.openModal;
+  window.openModal = function(editItem=null){
+    if (typeof _open === 'function'){ _open.apply(this, arguments); }
+    const hid = document.getElementById('globalId');
+    if (hid && editItem && editItem.global_id){
+      hid.value = editItem.global_id;
+    }
+    loadInfoLinksIfAny();
+  };
+})(); */
+
+
+// Stato locale della modale
+let stateInfoLinks = [];
+let stateMarketplaceLinks = [];
+
+function renderLinks(list, containerId){
+  const listEl = document.getElementById(containerId);
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  (list || []).forEach((u, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<a href="${u}" target="_blank" rel="noopener">${u}</a>
+                      <button type="button" data-idx="${idx}" aria-label="Rimuovi">&times;</button>`;
+    listEl.appendChild(chip);
+  });
+  listEl.querySelectorAll('button[data-idx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = parseInt(btn.getAttribute('data-idx'), 10);
+      if (containerId === 'infoLinksItemList') {
+        stateInfoLinks.splice(i, 1);
+        renderLinks(stateInfoLinks, 'infoLinksItemList');
+      } else {
+        stateMarketplaceLinks.splice(i, 1);
+        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+      }
+    });
+  });
+}
+
+//
+function hostFromUrl(u){
+  try { return new URL(u).hostname.replace(/^www\./,''); }
+  catch { return ''; }
+}
+
+// Mini set di SVG inline per i brand più comuni (fallback a favicon Google S2)
+const BRAND_SVG = {
+  'ebay': `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>`,
+  'vinted': `<svg viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="20" x="2" y="2" rx="5"/></svg>`,
+  'subito': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18"/></svg>`,
+  'discogs': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18"/></svg>`,
+  'catawiki': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/></svg>`,
+  'stockx': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5M5 5l14 14"/></svg>`,
+  'etsy': `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>`,
+  'amazon': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18c5 4 13 4 18 0"/></svg>`,
+  'wallapop': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20"/></svg>`,
+  'facebook': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20"/></svg>`,
+  'depop': `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/></svg>`
+};
+
+function brandKeyFromHost(host){
+  const h = host.toLowerCase();
+  if (h.includes('ebay')) return 'ebay';
+  if (h.includes('vinted')) return 'vinted';
+  if (h.includes('subito')) return 'subito';
+  if (h.includes('discogs')) return 'discogs';
+  if (h.includes('catawiki')) return 'catawiki';
+  if (h.includes('stockx')) return 'stockx';
+  if (h.includes('etsy')) return 'etsy';
+  if (h.includes('amazon')) return 'amazon';
+  if (h.includes('wallapop')) return 'wallapop';
+  if (h.includes('facebook') || h.includes('fb')) return 'facebook';
+  if (h.includes('depop')) return 'depop';
+  return null;
+}
+
+function iconHtmlFor(url){
+  const host = hostFromUrl(url);
+  const key = brandKeyFromHost(host);
+  //if (key && BRAND_SVG[key]) return BRAND_SVG[key];
+  // fallback su favicon Google
+  return `<img class="favicon" src="https://www.google.com/s2/favicons?domain=${host}" alt="">`;
+}
+
+function renderLinkList(urls, containerId){
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!Array.isArray(urls) || urls.length === 0){
+    el.innerHTML = '<span class="muted">Nessun link</span>';
+    return;
+  }
+  el.innerHTML = urls.map(u => {
+    const host = hostFromUrl(u) || u;
+    return `<a class="link-item" href="${u}" target="_blank" rel="noopener">
+              ${iconHtmlFor(u)}<span>${host}</span>
+            </a>`;
+  }).join('');
 }

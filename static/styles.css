@@ -880,3 +880,39 @@ body.theme-sakura .chip, body.theme-sakura .tag-pill { background:#fff; border-c
   .view-top { grid-template-columns: 1fr; }
   .view-media.fixed { height: 260px; }
 }
+
+.links-list{margin-top:8px;display:flex;flex-wrap:wrap;gap:8px}
+.links-list .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:var(--surface-2);}
+.links-list .chip a{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.links-list .chip button{border:none;background:transparent;cursor:pointer;font-weight:bold}
+.hstack{display:flex;gap:8px;align-items:center}
+
+.link-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: center;
+}
+.link-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  text-decoration: none;
+  max-width: 100%;
+}
+.link-item span {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.link-item .favicon,
+.link-item svg {
+  width: 18px; height: 18px; flex: 0 0 18px;
+}
+.muted { opacity: .7; }
+
