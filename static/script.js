@@ -188,7 +188,6 @@ function initApp() {
         const purchaseDate = document.getElementById('purchaseDate').value;
         const salePrice = document.getElementById('salePrice').value;
         const saleDate = document.getElementById('saleDate').value;
-        const marketplaceLink = document.getElementById('marketplaceLink').value.trim();
         const tags = document.getElementById('itemTags').value.trim();
         const quantity = document.getElementById('quantity').value;
         const conditionVal = document.getElementById('condition').value;
@@ -243,7 +242,6 @@ function initApp() {
                     purchase_date: purchaseDate || null,
                     sale_price: salePrice ? parseFloat(salePrice) : null,
                     sale_date: saleDate || null,
-                    marketplace_link: marketplaceLink || null,
                     tags,
                     quantity: quantity ? parseInt(quantity) : null,
                     condition: conditionVal || null,
@@ -554,7 +552,7 @@ function renderItems(items) {
         if (item.tags) {
             const tagsDiv = document.createElement('div');
             tagsDiv.className = 'tags';
-            const tags = item.tags.split(',').map(t => t.trim()).filter(Boolean);
+            const tags = item.tags.split('#').map(t => t.trim()).filter(Boolean);
             tags.forEach(tag => {
                 const span = document.createElement('span');
                 span.className = 'tag';
@@ -651,7 +649,6 @@ function openModal(item = null) {
     const purchaseDate = document.getElementById('purchaseDate');
     const salePrice = document.getElementById('salePrice');
     const saleDate = document.getElementById('saleDate');
-    const marketplaceLink = document.getElementById('marketplaceLink');
     const itemTags = document.getElementById('itemTags');
     const quantity = document.getElementById('quantity');
     const condition = document.getElementById('condition');
@@ -675,7 +672,6 @@ function openModal(item = null) {
         purchaseDate.value = item.purchase_date || '';
         salePrice.value = item.sale_price !== null && item.sale_price !== undefined ? item.sale_price : '';
         saleDate.value = item.sale_date || '';
-        marketplaceLink.value = item.marketplace_link || '';
         itemTags.value = item.tags || '';
         quantity.value = item.quantity !== null && item.quantity !== undefined ? item.quantity : '1';
         condition.value = item.condition || '';
@@ -716,7 +712,6 @@ function clearItemForm() {
     document.getElementById('purchaseDate').value = '';
     document.getElementById('salePrice').value = '';
     document.getElementById('saleDate').value = '';
-    document.getElementById('marketplaceLink').value = '';
     document.getElementById('itemTags').value = '';
     document.getElementById('quantity').value = '1';
     document.getElementById('condition').value = '';
@@ -1023,9 +1018,6 @@ function openViewModal(item){
 
     // Market links (item level) + fallback ad eventuale campo legacy
     let marketArr = Array.isArray(item.marketplace_links) ? item.marketplace_links : [];
-    if ((!marketArr || marketArr.length === 0) && item.marketplaceLink && typeof item.marketplaceLink === 'string'){
-    marketArr = [item.marketplaceLink];
-    }
     renderLinkList(marketArr, 'viewMarketplaceLinks');
 
     // Reset stima e apri
@@ -1146,11 +1138,6 @@ function validateFields() {
     const q = parseInt(document.getElementById('quantity').value || '1', 10);
     if (q < 1) setHint('quantityHint','La quantità deve essere almeno 1','error');
     else setHint('quantityHint','', '');
-
-    // Link
-    const link = document.getElementById('marketplaceLink').value.trim();
-    if (link && !/^https?:\/\//i.test(link)) setHint('marketplaceLinkHint','Il link deve iniziare con http:// o https://','warn');
-    else setHint('marketplaceLinkHint','', '');
 }
 
 function fmtMoney(v, cur){ if (v==null || isNaN(Number(v))) return '-'; return Number(v).toFixed(2) + (cur?(' '+cur):''); }
@@ -1298,12 +1285,14 @@ function renderMarketParamsFields(existing){
     wrap.innerHTML = '';
     schema.forEach(f => {
         const div = document.createElement('div');
-        div.className = 'field';
+        div.style = "max-width: 40%; padding-right: 0%; margin-right: 0%; border-right:0%";
+        //div.className = 'field';
 
         const inputId = 'mp_' + f.key;
         const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
 
-        const label = document.createElement('label');
+        const label = document.createElement('small');
+        label.className = 'hint-field'
         label.htmlFor = inputId;
         label.title = f.tip || '';
         label.textContent = f.label;

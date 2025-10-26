@@ -26,3 +26,4 @@ Thumbs.db
 app.py
 static/uploads/*
 database.db
+database.bak
