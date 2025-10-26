@@ -140,7 +140,6 @@ function initApp() {
     document.getElementById('salePrice')?.addEventListener('input', validateFields);
     document.getElementById('saleDate')?.addEventListener('change', validateFields);
     document.getElementById('quantity')?.addEventListener('input', validateFields);
-    document.getElementById('marketplaceLink')?.addEventListener('input', validateFields);
 
 // Eventi bottoni
     addItemBtn?.addEventListener('click', () => {
@@ -208,7 +207,8 @@ function initApp() {
                 formData.append('purchase_date', purchaseDate);
                 formData.append('sale_price', salePrice);
                 formData.append('sale_date', saleDate);
-                formData.append('marketplace_link', marketplaceLink);
+                formData.append('marketplace_links', JSON.stringify(stateMarketplaceLinks));
+                formData.append('info_links', JSON.stringify(stateInfoLinks));
                 formData.append('tags', tags);
                 formData.append('quantity', quantity);
                 formData.append('condition', conditionVal);
@@ -217,7 +217,7 @@ function initApp() {
                 const refVal = document.getElementById('purchasePriceRef').value;
                 formData.append('purchase_price_curr_ref', refVal);
                 try{
-                    const mp = getMarketParamsForSubmit();
+                    const mp = collectMarketParams();
                     if (Object.keys(mp).length) formData.append('market_params', JSON.stringify(mp));
                 }
                 catch(e)
@@ -279,6 +279,47 @@ function initApp() {
     const currencySelectInput = document.getElementById('currency');
     purchasePriceInput.addEventListener('input', autoCalculateRefPrice);
     currencySelectInput.addEventListener('change', autoCalculateRefPrice);
+
+    // Aggiunte
+    document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'btnAddInfoLinkItem') {
+        e.preventDefault();
+        const inp = document.getElementById('infoLinkItemInput');
+        const url = (inp?.value || '').trim();
+        if (!url) return;
+        if (!/^https?:\/\//i.test(url)) { alert('Inserisci un URL che inizi con http:// o https://'); return; }
+        if (!stateInfoLinks.includes(url)) stateInfoLinks.push(url);
+        inp.value = '';
+        renderLinks(stateInfoLinks, 'infoLinksItemList');
+    }
+    if (e.target && e.target.id === 'btnAddMarketplaceLinkItem') {
+        e.preventDefault();
+        const inp = document.getElementById('marketplaceLinkItemInput');
+        const url = (inp?.value || '').trim();
+        if (!url) return;
+        if (!/^https?:\/\//i.test(url)) { alert('Inserisci un URL che inizi con http:// o https://'); return; }
+        if (!stateMarketplaceLinks.includes(url)) stateMarketplaceLinks.push(url);
+        inp.value = '';
+        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+    }
+    });
+
+    const _openModalOrig = window.openModal;
+    window.openModal = function(editItem = null){
+        if (typeof _openModalOrig === 'function') _openModalOrig.apply(this, arguments);
+
+        // inizializza stati
+        stateInfoLinks = Array.isArray(editItem?.info_links) ? [...editItem.info_links] : [];
+        stateMarketplaceLinks = Array.isArray(editItem?.marketplace_links) ? [...editItem.marketplace_links] : [];
+
+        renderLinks(stateInfoLinks, 'infoLinksItemList');
+        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+
+        // pulisci input
+        const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
+        const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
+    };
+
 }
 
 // Calcola automaticamente il prezzo di acquisto nella valuta di riferimento dell'utente
@@ -660,6 +701,8 @@ function openModal(item = null) {
 
 function closeModal() {
     const modal = document.getElementById('itemModal');
+    stateInfoLinks = [];
+    stateMarketplaceLinks = [];
     modal.classList.add('hidden');
 }
 
@@ -974,6 +1017,17 @@ function openViewModal(item){
     set('viewTags',         item.tags);
   (function(){ const el=document.getElementById('viewToken'); if (!el) return; if (item.token) { el.textContent=item.token; el.style.display='inline-flex'; } else { el.textContent=''; el.style.display='none'; } })();
 
+    // Info links (item level)
+    const infoLinksArr = Array.isArray(item.info_links) ? item.info_links : [];
+    renderLinkList(infoLinksArr, 'viewInfoLinks');
+
+    // Market links (item level) + fallback ad eventuale campo legacy
+    let marketArr = Array.isArray(item.marketplace_links) ? item.marketplace_links : [];
+    if ((!marketArr || marketArr.length === 0) && item.marketplaceLink && typeof item.marketplaceLink === 'string'){
+    marketArr = [item.marketplaceLink];
+    }
+    renderLinkList(marketArr, 'viewMarketplaceLinks');
+
     // Reset stima e apri
     document.getElementById('estContent').innerHTML = '<em>Caricamento stima in corso…</em>';
     document.getElementById('estSource').textContent = '';
@@ -1233,76 +1287,38 @@ const MARKET_HINTS_SCHEMA = {
 function renderMarketParamsFields(existing){
     const wrap = document.getElementById('marketParamsFields');
     if (!wrap) return;
-  
+
     const catRaw = document.getElementById('itemCategory')?.value || '';
     const catKey = normalizeCategory(catRaw);
-    wrap.innerHTML = ''
-    
-    const div = document.createElement('div');
-    div.className = 'field';
+    const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
 
-    const labelType = document.createElement('label');
-    labelType.title = 'Type';
-    labelType.textContent = 'Type';
+    // Valori esistenti (object) se passati o presi dai campi attuali
+    const existingObj = existing ? parseMarketParams(existing) : collectMarketParams();
 
-    const selectType = document.createElement('select');
-    selectType.id = 'selectType';
-    const optEAN = document.createElement('option');
-    optEAN.value = 'EAN';
-    optEAN.text = 'EAN';
-    const optDMG = document.createElement('option');
-    optDMG.value = 'DMG';
-    optDMG.text = 'DMG';
-    selectType.append(optEAN,optDMG);
+    wrap.innerHTML = '';
+    schema.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'field';
 
-    const labelSerial = document.createElement('label');
-    labelSerial.title = 'Serial';
-    labelSerial.textContent = 'Serial';
+        const inputId = 'mp_' + f.key;
+        const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.id = 'inputSerial';
-    //input.placeholder = f.placeholder || '';
-    //input.value = val || '';
+        const label = document.createElement('label');
+        label.htmlFor = inputId;
+        label.title = f.tip || '';
+        label.textContent = f.label;
 
-    div.append(labelType,selectType,labelSerial, input);
-    wrap.appendChild(div);
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = inputId;
+        input.placeholder = f.placeholder || '';
+        input.value = val || '';
 
-}
+        div.append(label, input);
+        wrap.appendChild(div);    
+    });
 
-function renderMarketParamsFields_field(existing){
-  const wrap = document.getElementById('marketParamsFields');
-  if (!wrap) return;
 
-  const catRaw = document.getElementById('itemCategory')?.value || '';
-  const catKey = normalizeCategory(catRaw);
-  const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
-
-  // Valori esistenti (object) se passati o presi dai campi attuali
-  const existingObj = existing ? parseMarketParams(existing) : collectMarketParams();
-
-  wrap.innerHTML = '';
-  schema.forEach(f => {
-    const div = document.createElement('div');
-    div.className = 'field';
-
-    const inputId = 'mp_' + f.key;
-    const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
-
-    const label = document.createElement('label');
-    label.htmlFor = inputId;
-    label.title = f.tip || '';
-    label.textContent = f.label;
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.id = inputId;
-    input.placeholder = f.placeholder || '';
-    input.value = val || '';
-
-    div.append(label, input);
-    wrap.appendChild(div);
-  });
 }
 
 function collectMarketParams(){
@@ -1343,101 +1359,186 @@ function normalizeCategory(cat){
 }
 
 
-let _resolvedMarketParams = null; // cache risoluzione corrente
-
-function inferPlatformFromCode(codeType, codeValue, category){
-  const c = (category||'').toLowerCase();
-  if (codeType === 'DMG') return 'Game Boy';
-  if (c.includes('videog') || c.includes('video')) return 'Game Boy'; // fallback per il nostro primo step
-  return '';
+// ===== Global Catalog: Info Links =====
+function getCurrentGlobalId(){
+  const el = document.getElementById('globalId');
+  if (!el) return null;
+  const v = (el.value||'').trim();
+  return v ? parseInt(v,10) : null;
 }
 
-function showResolvedBox(summaryPills, sourceText){
-  const box = document.getElementById('codeResolveResult');
-  const sum = document.getElementById('codeResolvedSummary');
-  const src = document.getElementById('codeResolvedSource');
-  if (!box || !sum || !src) return;
-  sum.innerHTML = summaryPills.join(' ');
-  src.textContent = sourceText || '';
-  box.style.display = 'block';
-}
-
-async function resolveCodeToMarketParams(){
-  const codeType = (document.getElementById('codeTypeSelect')?.value || '').trim().toUpperCase();
-  const code = (document.getElementById('codeValueInput')?.value || '').trim();
-  const category = (document.getElementById('itemCategory')?.value || '').trim();
-
-  if (!codeType || !code){
-    alert('Seleziona tipo codice e inserisci un valore.');
-    return;
-  }
-  // per ora partiamo sui videogiochi (Game Boy). Invieremo platform dedotta.
-  const platform = inferPlatformFromCode(codeType, code, category);
-
-  const body = { category, code_type: codeType, code: code, platform };
-  const r = await fetch('/api/code-resolve', {
-    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+function renderInfoLinks(links){
+  const list = document.getElementById('infoLinksList');
+  if (!list) return;
+  list.innerHTML = '';
+  (links||[]).forEach((u, idx)=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<a href="${u}" target="_blank" rel="noopener">${u}</a> <button type="button" data-idx="${idx}" aria-label="Rimuovi">&times;</button>`;
+    list.appendChild(chip);
   });
-  const js = await r.json();
+  list.querySelectorAll('button[data-idx]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = parseInt(btn.getAttribute('data-idx'),10);
+      currentInfoLinks.splice(i,1);
+      renderInfoLinks(currentInfoLinks);
+    });
+  });
+}
 
-  if (js.error){
-    _resolvedMarketParams = null;
-    showResolvedBox([`<span class="pill">Nessun risultato</span>`], js.query ? `Fonte: ${js.query.source||''}` : '');
+/* let currentInfoLinks = [];
+
+async function loadInfoLinksIfAny(){
+  const gid = getCurrentGlobalId();
+  const sect = document.getElementById('infoLinksSection');
+  if (!sect) return;
+  if (!gid){
+    sect.style.display = 'none';
+    currentInfoLinks = [];
+    renderInfoLinks(currentInfoLinks);
     return;
   }
+  sect.style.display = '';
+  try{
+    const r = await fetch(`/api/global-catalog/${gid}/info-links`);
+    const jsn = await r.json();
+    currentInfoLinks = jsn.links || [];
+  }catch(e){
+    currentInfoLinks = [];
+  }
+  renderInfoLinks(currentInfoLinks);
+} */
 
-  // Salva market_params risolti (li applicheremo su richiesta)
-  _resolvedMarketParams = js.normalized?.market_params || {};
+/* document.addEventListener('click', (e)=>{
+  if (e.target && e.target.id === 'btnAddInfoLink'){
+    e.preventDefault();
+    const inp = document.getElementById('infoLinkInput');
+    if (!inp) return;
+    const url = (inp.value||'').trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)){ alert('Inserisci un URL che inizi con http:// o https://'); return; }
+    currentInfoLinks.push(url);
+    inp.value='';
+    renderInfoLinks(currentInfoLinks);
+  }
+  if (e.target && e.target.id === 'btnSaveInfoLinks'){
+    e.preventDefault();
+    saveInfoLinks();
+  }
+}); */
 
-  // UI breve: nome, piattaforma, anno, id sorgente
-  const pills = [];
-  if (js.normalized?.title) pills.push(`<span class="pill"><strong>Titolo</strong> ${js.normalized.title}</span>`);
-  if (js.normalized?.platform) pills.push(`<span class="pill"><strong>Piattaforma</strong> ${js.normalized.platform}</span>`);
-  if (js.normalized?.year) pills.push(`<span class="pill"><strong>Anno</strong> ${js.normalized.year}</span>`);
-  if (js.normalized?.region) pills.push(`<span class="pill"><strong>Regione</strong> ${js.normalized.region}</span>`);
-  if (js.normalized?.pricecharting_id) pills.push(`<span class="pill"><strong>PC ID</strong> ${js.normalized.pricecharting_id}</span>`);
-  if (_resolvedMarketParams?.serial) pills.push(`<span class="pill"><strong>Serial</strong> ${_resolvedMarketParams.serial}</span>`);
-
-  const source = js.query ? `Fonte: ${js.query.source || 'PriceCharting'} — ${js.query.note||''}` : 'Fonte: PriceCharting';
-  showResolvedBox(pills, source);
+async function saveInfoLinks(){
+  const gid = getCurrentGlobalId();
+  if (!gid){ alert('Collega prima un elemento del Catalogo Globale.'); return; }
+  try{
+    const r = await fetch(`/api/global-catalog/${gid}/info-links`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({links: currentInfoLinks})
+    });
+    const jsn = await r.json();
+    if (jsn.ok){ alert('Link salvati.'); } else { alert('Impossibile salvare i link.'); }
+  }catch(e){ alert('Errore salvataggio link.'); }
 }
 
-// Applica i parametri risolti ai campi dell’item (nome/categoria + market_params)
-function applyResolvedToForm(){
-  if (!_resolvedMarketParams) return;
+// Hook su openModal per caricare i link quando presente global_id
+/* (function(){
+  const _open = window.openModal;
+  window.openModal = function(editItem=null){
+    if (typeof _open === 'function'){ _open.apply(this, arguments); }
+    const hid = document.getElementById('globalId');
+    if (hid && editItem && editItem.global_id){
+      hid.value = editItem.global_id;
+    }
+    loadInfoLinksIfAny();
+  };
+})(); */
 
-  // Nome: se vuoto o se vuoi forzare, aggiorna
-  const nameEl = document.getElementById('itemName');
-  if (nameEl && (!nameEl.value || nameEl.value.trim()==='') && window.lastResolveNormalized?.title){
-    nameEl.value = window.lastResolveNormalized.title;
-  }
 
-  // Categoria → Videogiochi se coerente
-  const catEl = document.getElementById('itemCategory');
-  if (catEl && _resolvedMarketParams.platform && !catEl.value){
-    catEl.value = 'videogames';
-  }
+// Stato locale della modale
+let stateInfoLinks = [];
+let stateMarketplaceLinks = [];
 
-  // Salva i market_params risolti (verranno inviati in create/update)
-  window.resolvedMarketParamsForSubmit = _resolvedMarketParams;
-  alert('Parametri risolti applicati. Salva l’item per mantenerli.');
+function renderLinks(list, containerId){
+  const listEl = document.getElementById(containerId);
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  (list || []).forEach((u, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = `<a href="${u}" target="_blank" rel="noopener">${u}</a>
+                      <button type="button" data-idx="${idx}" aria-label="Rimuovi">&times;</button>`;
+    listEl.appendChild(chip);
+  });
+  listEl.querySelectorAll('button[data-idx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = parseInt(btn.getAttribute('data-idx'), 10);
+      if (containerId === 'infoLinksItemList') {
+        stateInfoLinks.splice(i, 1);
+        renderLinks(stateInfoLinks, 'infoLinksItemList');
+      } else {
+        stateMarketplaceLinks.splice(i, 1);
+        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+      }
+    });
+  });
 }
 
-// Hook pulsanti nella modale
-document.addEventListener('click', (e)=>{
-  if (e.target && e.target.id === 'btnResolveCode'){ e.preventDefault(); resolveCodeToMarketParams(); }
-  if (e.target && e.target.id === 'btnApplyResolved'){ e.preventDefault(); applyResolvedToForm(); }
-});
+//
+function hostFromUrl(u){
+  try { return new URL(u).hostname.replace(/^www\./,''); }
+  catch { return ''; }
+}
 
-// Al submit, se abbiamo parametri risolti, usali
-// — se salvi con JSON: payload.market_params = JSON.stringify(...)
-// — se salvi multipart: formData.append('market_params', JSON.stringify(...))
+// Mini set di SVG inline per i brand più comuni (fallback a favicon Google S2)
+const BRAND_SVG = {
+  'ebay': `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>`,
+  'vinted': `<svg viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="20" x="2" y="2" rx="5"/></svg>`,
+  'subito': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18"/></svg>`,
+  'discogs': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18"/></svg>`,
+  'catawiki': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/></svg>`,
+  'stockx': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5M5 5l14 14"/></svg>`,
+  'etsy': `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>`,
+  'amazon': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18c5 4 13 4 18 0"/></svg>`,
+  'wallapop': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20"/></svg>`,
+  'facebook': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20"/></svg>`,
+  'depop': `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/></svg>`
+};
 
-// Esempio (adatta ai tuoi metodi esistenti):
-function getMarketParamsForSubmit(){
-  // se abbiamo già un flusso nuovo, usalo
-  if (window.resolvedMarketParamsForSubmit) return window.resolvedMarketParamsForSubmit;
-  // fallback: se hai ancora collectMarketParams(), puoi usarlo:
-  if (typeof collectMarketParams === 'function') return collectMarketParams();
-  return {};
+function brandKeyFromHost(host){
+  const h = host.toLowerCase();
+  if (h.includes('ebay')) return 'ebay';
+  if (h.includes('vinted')) return 'vinted';
+  if (h.includes('subito')) return 'subito';
+  if (h.includes('discogs')) return 'discogs';
+  if (h.includes('catawiki')) return 'catawiki';
+  if (h.includes('stockx')) return 'stockx';
+  if (h.includes('etsy')) return 'etsy';
+  if (h.includes('amazon')) return 'amazon';
+  if (h.includes('wallapop')) return 'wallapop';
+  if (h.includes('facebook') || h.includes('fb')) return 'facebook';
+  if (h.includes('depop')) return 'depop';
+  return null;
+}
+
+function iconHtmlFor(url){
+  const host = hostFromUrl(url);
+  const key = brandKeyFromHost(host);
+  //if (key && BRAND_SVG[key]) return BRAND_SVG[key];
+  // fallback su favicon Google
+  return `<img class="favicon" src="https://www.google.com/s2/favicons?domain=${host}" alt="">`;
+}
+
+function renderLinkList(urls, containerId){
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!Array.isArray(urls) || urls.length === 0){
+    el.innerHTML = '<span class="muted">Nessun link</span>';
+    return;
+  }
+  el.innerHTML = urls.map(u => {
+    const host = hostFromUrl(u) || u;
+    return `<a class="link-item" href="${u}" target="_blank" rel="noopener">
+              ${iconHtmlFor(u)}<span>${host}</span>
+            </a>`;
+  }).join('');
 }

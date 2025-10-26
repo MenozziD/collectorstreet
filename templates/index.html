@@ -146,9 +146,49 @@
                 <h3 class="section-title">Foto</h3>
                 <input type="file" id="image" accept="image/*"
                        title="Immagine — Carica una foto per l'item.">
-                <div id="marketParamsFields"></div>
-            </div>
 
+                <input type="number" min="1" id="globalId" placeholder="Quantità" value="2"
+                       title="Global ID">
+
+<!--                 <h3 class="section-title">Link informativi</h3>
+                <div id="infoLinksSection" class="section-grid advanced-grid">
+                  <div class="full">
+                    <div class="hstack">
+                      <input type="url" id="infoLinkInput" placeholder="https://…">
+                      <button id="btnAddInfoLink" class="btn small" title="Aggiungi link">+</button>
+                      <button id="btnSaveInfoLinks" class="btn small" title="Salva">Salva</button>
+                    </div>
+                    <div id="infoLinksList" class="links-list"></div>
+                    <small class="hint">Aggiungi uno o più link utili. I link sono salvati sul Catalogo Globale dell’oggetto.</small>
+                  </div>
+                </div> -->
+
+                <div id="marketParamsFields"></div>
+
+                <h3 class="section-title">Link informativi (Item)</h3>
+                <div id="infoLinksItemSection" class="section-grid advanced-grid">
+                <div class="full">
+                    <div class="hstack">
+                    <input type="url" id="infoLinkItemInput" placeholder="https://…" />
+                    <button id="btnAddInfoLinkItem" class="btn small" title="Aggiungi link">+</button>
+                    </div>
+                    <div id="infoLinksItemList" class="links-list"></div>
+                    <small class="hint">Questi link sono legati all’<strong>item</strong> (non al catalogo globale).</small>
+                </div>
+                </div>
+
+                <h3 class="section-title">Link marketplace (Item)</h3>
+                <div id="marketplaceLinksItemSection" class="section-grid advanced-grid">
+                <div class="full">
+                    <div class="hstack">
+                    <input type="url" id="marketplaceLinkItemInput" placeholder="https:// (inserisci URL annuncio / vendita)" />
+                    <button id="btnAddMarketplaceLinkItem" class="btn small" title="Aggiungi link">+</button>
+                    </div>
+                    <div id="marketplaceLinksItemList" class="links-list"></div>
+                    <small class="hint">Puoi inserire più link (eBay, Vinted, Subito, ecc.).</small>
+                </div>
+                </div>
+            </div>
             <button type="submit">Salva</button>
         </form>
     </div>
@@ -176,6 +216,9 @@
         <div class="view-grid">
             <div class="chiplist" id="viewChips"></div>
             <div class="full" style="border-top: -20px;"><span class="label">Descrizione</span><span id="viewDescription"></span></div>
+            <div class="full"><span class="label">Link item</span>
+                <div id="viewInfoLinks" class="link-list"></div>
+            </div>
             <div style="display: flex; flex-direction: row;" class="full">
                 <div style="width: 30%;"><span class="label" style="border-right: 10px;">Prezzo acquisto</span><span id="viewPurchase"></span></div>
                 <div style="width: 30%;"><span class="label" style="border-right: 10px;">Data acquisto</span><span id="viewPurchaseDate"></span></div>
@@ -187,7 +230,7 @@
             </div>
 
             <div class="full"><span class="label">Link marketplace</span>
-                <a id="viewLink" href="#" target="_blank" rel="noopener">Apri annuncio</a>Apri annuncio
+                <div id="viewMarketplaceLinks" class="link-list"></div>
             </div>
             <div class="full">
                 <span class="label" style="margin-bottom: 16px;">Tag</span>
@@ -236,3 +279,5 @@
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+
+            

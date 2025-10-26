@@ -84,7 +84,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 purchase_date TEXT,
                 sale_price REAL,
                 sale_date TEXT,
-                marketplace_link TEXT,
+                marketplace_links TEXT,
                 tags TEXT,
                 image_path TEXT,
                 market_params TEXT,
@@ -168,7 +168,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             ('price_p05', 'REAL'),
             ('price_p95', 'REAL'),
             ('valuation_date', 'TEXT'),
-            ('global_id', 'INTEGER')
+            ('global_id', 'INTEGER'),
+            ('info_links', 'TEXT')
         ]:
             try:
                 cur.execute(f"ALTER TABLE items ADD COLUMN {column} {col_type}")
@@ -199,6 +200,25 @@ def create_app(db_path: str = "database.db") -> Flask:
     # Initialize database on app creation
     init_db()
   
+
+    def _parse_links_field(val):
+        """Accetta stringa JSON o lista; restituisce sempre una lista di stringhe http/https."""
+        if not val:
+            return []
+        try:
+            if isinstance(val, str):
+                obj = json.loads(val)
+            else:
+                obj = val
+        except Exception:
+            return []
+        out = []
+        if isinstance(obj, list):
+            for x in obj:
+                u = x.get('url').strip() if isinstance(x, dict) and x.get('url') else (str(x).strip() if isinstance(x, str) else '')
+                if u and (u.startswith('http://') or u.startswith('https://')):
+                    out.append(u)
+        return out
 
     def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
         """
@@ -518,6 +538,18 @@ def create_app(db_path: str = "database.db") -> Flask:
             item_tags = [t.strip().lower() for t in (item['tags'] or '').split(',') if t.strip()]
             if tags_filter and not all(tag in item_tags for tag in tags_filter):
                 continue
+            info_links = []
+            if item['info_links']:
+                try:
+                    info_links = json.loads(item['info_links']) if item['info_links'] else []
+                except Exception:
+                    info_links = [] 
+            marketplace_links = [] 
+            if item['marketplace_links']:
+                try:
+                    marketplace_links = json.loads(item['marketplace_links']) if item['marketplace_links'] else []
+                except Exception:
+                    marketplace_links = [] 
             # Compute derived fields
             time_in_collection = None
             roi = None
@@ -559,7 +591,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'purchase_date': item['purchase_date'],
                 'sale_price': item['sale_price'],
                 'sale_date': item['sale_date'],
-                'marketplace_link': item['marketplace_link'],
+                'marketplace_links': marketplace_links,
+                'info_links': info_links,
                 'tags': item['tags'],
                 'image_path': item['image_path'],
                 'quantity': item['quantity'],
@@ -594,7 +627,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         purchase_date = data.get('purchase_date')
         sale_price = data.get('sale_price')
         sale_date = data.get('sale_date')
-        marketplace_link = data.get('marketplace_link')
+        marketplace_links = _parse_links_field(data.get('marketplace_links'))
+        info_links = _parse_links_field(data.get('info_links'))
         tags = data.get('tags')
         quantity = data.get('quantity')
         condition_field = data.get('condition')
@@ -629,9 +663,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             """
             INSERT INTO items (
                 user_id, name, description, category, purchase_price, purchase_price_curr_ref, purchase_date,
-                sale_price, sale_date, marketplace_link, tags, image_path, quantity, condition, currency, language,market_params
+                sale_price, sale_date, marketplace_links, info_links, tags, image_path, quantity, condition, currency, language,market_params
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
@@ -643,7 +677,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 purchase_date,
                 sale_price,
                 sale_date,
-                marketplace_link,
+                json.dumps(marketplace_links, ensure_ascii=False),
+                json.dumps(info_links, ensure_ascii=False),
                 tags,
                 None,  # image_path set to NULL on creation
                 quantity,
@@ -774,7 +809,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'purchase_date': form.get('purchase_date'),
                 'sale_price': float(form.get('sale_price')) if form.get('sale_price') else None,
                 'sale_date': form.get('sale_date'),
-                'marketplace_link': form.get('marketplace_link'),
+                'marketplace_links': form.get('marketplace_links'),
+                'info_links': form.get('info_links'),
                 'tags': form.get('tags'),
                 'quantity': int(form.get('quantity')) if form.get('quantity') else None,
                 'condition': form.get('condition'),
@@ -846,7 +882,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             fields = []
             values = []
             # Build update list from provided fields
-            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_link', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language', 'market_params']:
+            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_links', 'info_links', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language', 'market_params']:
                 if key in data and data[key] is not None:
                     fields.append(f"{key} = ?")
                     values.append(data[key])
@@ -2195,3 +2231,44 @@ if __name__ == '__main__':
 
 
 
+
+
+@app.route('/api/global-catalog/<int:gid>/info-links', methods=['GET'])
+@require_login
+def get_global_info_links(gid):
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("SELECT info_links FROM global_catalog WHERE id=?", (gid,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return jsonify({'error':'not found'}), 404
+    raw = row['info_links'] if isinstance(row, dict) else row[0]
+    try:
+        links = json.loads(raw) if raw else []
+    except Exception:
+        links = []
+    out = []
+    if isinstance(links, list):
+        for x in links:
+            if isinstance(x, str): out.append(x)
+            elif isinstance(x, dict) and x.get('url'): out.append(x['url'])
+    return jsonify({'links': out})
+
+@app.route('/api/global-catalog/<int:gid>/info-links', methods=['PUT'])
+@require_login
+def put_global_info_links(gid):
+    data = request.get_json(silent=True) or {}
+    links = data.get('links') or []
+    clean = []
+    if isinstance(links, list):
+        for x in links:
+            if not x: continue
+            if isinstance(x, str): u = x.strip()
+            elif isinstance(x, dict) and x.get('url'): u = str(x['url']).strip()
+            else: continue
+            if u.startswith('http://') or u.startswith('https://'):
+                clean.append(u)
+    conn = get_db_connection(); cur = conn.cursor()
+    cur.execute("UPDATE global_catalog SET info_links=?, updated_at=? WHERE id=?", (json.dumps(clean, ensure_ascii=False), datetime.datetime.utcnow().isoformat(), gid))
+    conn.commit(); conn.close()
+    return jsonify({'ok': True, 'links': clean})
