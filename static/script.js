@@ -1201,7 +1201,7 @@ function renderTagPills(item){
   const tgt = document.getElementById('viewTagList');
   if (!tgt) return;
   tgt.innerHTML = '';
-  const tags = (item.tags || '').split(',').map(s=>s.trim()).filter(Boolean);
+  const tags = (item.tags || '').split('#').map(s=>s.trim()).filter(Boolean);
   tags.forEach(t => {
     const el = document.createElement('span'); el.className='tag-pill'; el.textContent = t;
     tgt.appendChild(el);
@@ -1285,7 +1285,7 @@ function renderMarketParamsFields(existing){
     wrap.innerHTML = '';
     schema.forEach(f => {
         const div = document.createElement('div');
-        div.style = "max-width: 40%; padding-right: 0%; margin-right: 0%; border-right:0%";
+        //div.style = "width: 40%; padding-right: 0%; margin-right: 0%; border-right:0%;";
         //div.className = 'field';
 
         const inputId = 'mp_' + f.key;
