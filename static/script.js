@@ -626,8 +626,8 @@ function populateCategories(items) {
 }
 
 function openModal(item = null) {
-    // reset label/hints
-    //hookCategorySelect();
+    
+  // reset label/hints
     updateRefCurrencyLabel();
     setHint('purchasePriceHint',''); setHint('purchaseDateHint',''); setHint('purchasePriceRefHint',''); setHint('salePriceHint',''); setHint('saleDateHint',''); setHint('quantityHint',''); setHint('marketplaceLinkHint','');
     const modalContentEl = document.querySelector('#itemModal .modal-content');
@@ -658,6 +658,7 @@ function openModal(item = null) {
     
     if (item) {
         modalTitle.textContent = 'Modifica Item';
+        toggleAdvancedBtn.style="display: flex";
         itemId.value = item.id;
         itemName.value = item.name || '';
         itemDescription.value = item.description || '';
@@ -684,7 +685,9 @@ function openModal(item = null) {
         }
     } else {
         modalTitle.textContent = 'Nuovo Item';
+        toggleAdvancedBtn.style="display: None";
         clearItemForm();
+        // Nascondi toggleAdvancedBtn 
         // Reset reference price field
         if (purchasePriceRef) purchasePriceRef.value = '';
     }

@@ -874,8 +874,8 @@ def create_app(db_path: str = "database.db") -> Flask:
             conn.commit()
             conn.close()
             # verifica se valido ed esiste già in global_catalog
-            if(mp and cat):
-                ensure_global_by_serial(mp,cat)
+            #if(mp and cat):
+                #ensure_global_by_serial(mp,cat)
             return jsonify({'message': 'Item updated'})
         else:
             data = request.get_json() or {}
