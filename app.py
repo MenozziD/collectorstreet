@@ -7,6 +7,7 @@ import io
 from dotenv import load_dotenv
 from datetime import datetime, date
 import json
+from app import db, hlp, gc
 
 
 def create_app(db_path: str = "database.db") -> Flask:
@@ -24,202 +25,13 @@ def create_app(db_path: str = "database.db") -> Flask:
     app.config['SECRET_KEY'] = 'replace-this-with-a-secret-key'
     app.config['DATABASE'] = os.path.join(os.path.dirname(__file__), db_path)
 
-    def get_db_connection():
-        """Helper to get a connection to the SQLite database."""
-        conn = sqlite3.connect(app.config['DATABASE'])
-        # Return rows as dictionaries for easier handling
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def init_db():
-        """
-        Initializes the database by creating necessary tables if they don't exist
-        and ensuring a default admin user is present.
-        """
-        conn = get_db_connection()
-        cur = conn.cursor()
-        # Create users table
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                nickname TEXT,
-                profile_image_path TEXT,
-                vinted_link TEXT,
-                cardmarket_link TEXT,
-                ebay_link TEXT,
-                facebook_link TEXT,
-                ref_currency TEXT
-            )
-            """
-        )
-        # Add missing profile columns if needed
-        for column, col_type in [
-            ('nickname', 'TEXT'),
-            ('profile_image_path', 'TEXT'),
-            ('vinted_link', 'TEXT'),
-            ('cardmarket_link', 'TEXT'),
-            ('ebay_link', 'TEXT'),
-            ('facebook_link', 'TEXT'),
-            ('ref_currency', 'TEXT')
-        
-            ,('theme', 'TEXT')]:
-            try:
-                cur.execute(f"ALTER TABLE users ADD COLUMN {column} {col_type}")
-            except sqlite3.OperationalError:
-                pass
-        # Create items table. Each item is linked to the user who created it via the user_id field.
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                name TEXT NOT NULL,
-                description TEXT,
-                category TEXT,
-                purchase_price REAL,
-                purchase_price_curr_ref REAL,
-                purchase_date TEXT,
-                sale_price REAL,
-                sale_date TEXT,
-                marketplace_links TEXT,
-                tags TEXT,
-                image_path TEXT,
-                market_params TEXT,
-                quantity INTEGER,
-                condition TEXT,
-                currency TEXT,
-                language TEXT,
-                fair_value REAL,
-                price_p05 REAL,
-                price_p95 REAL,
-                valuation_date TEXT,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )
-            """
-        )
-
-        # === GLOBAL CATALOG ===
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS global_catalog (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            catalog_key TEXT UNIQUE,              -- chiave univoca dedotta (es. discogs:12345, lego:75336, ean:...)
-            canonical_name TEXT NOT NULL,         -- nome canonico (es. Artist - Album, o Nome set, ecc.)
-            category TEXT,                        -- categoria (vinyl, cd, videogames, sneakers, lego, trading card, ...)
-            identifiers TEXT,                     -- JSON (discogs_release_id, ean/upc, sku, set_number, stockx_slug, tcgplayer_id, catno/label, ...)
-            market_params TEXT,                   -- JSON: stessi campi che usi per le ricerche
-            info_links TEXT,                      -- JSON array di link descrittivi (wiki, discogs url, ecc.)
-            created_at TEXT,
-            updated_at TEXT
-        );
-        """)
-
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS global_catalog_prices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            global_id INTEGER NOT NULL,
-            ref_date TEXT NOT NULL,              -- YYYY-MM-DD (giorno di riferimento)
-            source TEXT,                         -- 'discogs' | 'ebay' | 'pricecharting' | 'stockx' | 'justtcg' | ...
-            samples_count INTEGER,
-            avg REAL,
-            median REAL,
-            min REAL,
-            max REAL,
-            query TEXT,                          -- JSON della query/fonte usata
-            created_at TEXT,
-            UNIQUE(global_id, ref_date, source)  -- un record al giorno per fonte
-        );
-        """)
-        
-        # eBay price history per-item (one record per day)
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS ebay_price_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_id INTEGER NOT NULL,
-                date TEXT NOT NULL,
-                avg REAL,
-                median REAL,
-                min REAL,
-                max REAL,
-                count INTEGER,
-                currency TEXT,
-                keywords TEXT,
-                site_id TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(item_id, date)
-            )
-            """
-        )
-        # Attempt to add missing columns for backward compatibility. This ensures that
-        # databases created before new fields were introduced continue to work.
-        for column, col_type in [
-            ('user_id', 'INTEGER'),
-            ('image_path', 'TEXT'),
-            ('quantity', 'INTEGER'),
-            ('condition', 'TEXT'),
-            ('currency', 'TEXT'),
-            ('language', 'TEXT'),
-            ('purchase_price_curr_ref', 'REAL'),
-            ('market_params', 'TEXT'),
-            ('fair_value', 'REAL'),
-            ('price_p05', 'REAL'),
-            ('price_p95', 'REAL'),
-            ('valuation_date', 'TEXT'),
-            ('global_id', 'INTEGER'),
-            ('info_links', 'TEXT')
-        ]:
-            try:
-                cur.execute(f"ALTER TABLE items ADD COLUMN {column} {col_type}")
-            except sqlite3.OperationalError:
-                # Column already exists
-                pass
-        # Insert default admin user if not exists
-        cur.execute("SELECT id FROM users WHERE username = ?", ('admin',))
-        admin_row = cur.fetchone()
-        if admin_row is None:
-            cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", ('admin', 'admin'))
-            admin_id = cur.lastrowid
-        else:
-            admin_id = admin_row['id'] if isinstance(admin_row, sqlite3.Row) else admin_row[0]
-        # For existing items created before user_id column existed, assign them to the admin user
-        try:
-            cur.execute("UPDATE items SET user_id = ? WHERE user_id IS NULL", (admin_id,))
-        except Exception:
-            # If the column doesn't exist yet, ignore
-            pass
-        conn.commit()
-        conn.close()
-
     # Configure upload folder for images
     upload_folder = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
     os.makedirs(upload_folder, exist_ok=True)
     app.config['UPLOAD_FOLDER'] = upload_folder
     # Initialize database on app creation
-    init_db()
+    db.init_db(app.config['DATABASE'])
   
-
-    def _parse_links_field(val):
-        """Accetta stringa JSON o lista; restituisce sempre una lista di stringhe http/https."""
-        if not val:
-            return []
-        try:
-            if isinstance(val, str):
-                obj = json.loads(val)
-            else:
-                obj = val
-        except Exception:
-            return []
-        out = []
-        if isinstance(obj, list):
-            for x in obj:
-                u = x.get('url').strip() if isinstance(x, dict) and x.get('url') else (str(x).strip() if isinstance(x, str) else '')
-                if u and (u.startswith('http://') or u.startswith('https://')):
-                    out.append(u)
-        return out
-
     def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
         """
         Convert an amount from one currency to another using exchangerate.host free API.
@@ -370,7 +182,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         item_count: int = 0
         first_date = None
         # Fetch only the items belonging to this user
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         user_id = user.get('id') if user else None
         if user_id:
@@ -447,7 +259,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         """
         if not session.get('logged_in'):
             return render_template('login.html')
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         user_id = session.get('user_id')
         cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -467,7 +279,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         password = data.get('password')
         if not username or not password:
             return jsonify({'error': 'Missing credentials'}), 400
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password))
         user = cur.fetchone()
@@ -517,7 +329,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         tags_filter = [t.strip() for t in tags_param.split(',') if t.strip()] if tags_param else []
         # Only retrieve items belonging to the logged-in user
         user_id = session.get('user_id')
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         if user_id is not None:
             cur.execute("SELECT * FROM items WHERE user_id = ?", (user_id,))
@@ -627,8 +439,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         purchase_date = data.get('purchase_date')
         sale_price = data.get('sale_price')
         sale_date = data.get('sale_date')
-        marketplace_links = _parse_links_field(data.get('marketplace_links'))
-        info_links = _parse_links_field(data.get('info_links'))
+        marketplace_links = hlp._parse_links_field(data.get('marketplace_links'))
+        info_links = hlp._parse_links_field(data.get('info_links'))
         tags = data.get('tags')
         quantity = data.get('quantity')
         condition_field = data.get('condition')
@@ -644,7 +456,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                 user_id = session.get('user_id')
                 user_ref = None
                 if user_id:
-                    conn = get_db_connection()
+                    conn = db.get_db_connection(app.config['DATABASE'])
                     ccur = conn.cursor()
                     ccur.execute("SELECT ref_currency FROM users WHERE id = ?", (user_id,))
                     row = ccur.fetchone()
@@ -657,7 +469,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             purchase_price_curr_ref = None
         # Insert a new item associated with the current user. The image_path is stored as NULL on creation.
         user_id = session.get('user_id')
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute(
             """
@@ -691,100 +503,9 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.commit()
         item_id = cur.lastrowid
         conn.close()
-        # verifica se valido ed esiste già in global_catalog
-        if(data.get('market_params') and data.get('category')):
-            ensure_global_by_serial(data.get('market_params'),data.get('category'))
         return jsonify({'id': item_id}), 201
 
-    def ensure_global_by_serial(market_params,category) -> int:
-        
-        #if not serial or not str(serial).strip():
-            #raise ValueError("serial è obbligatorio")
-        
-        jl = json.loads(market_params)
-        jl.get('serial_number')
-        serial = str(jl.get('serial_number')).strip()
 
-        conn = get_db_connection()
-        cur = conn.cursor()
-        err = False
-
-        # 1) SELECT (prima con json_extract se disponibile, altrimenti fallback LIKE)
-        found = None
-        try:
-            # Tentativo con JSON1
-            cur.execute("""
-                SELECT id FROM global_catalog
-                WHERE json_extract(market_params, '$.serial') = ?
-                OR catalog_key = ?
-                LIMIT 1
-            """, (serial, f"serial:{serial}"))
-            found = cur.fetchone()
-        except sqlite3.OperationalError:
-            # Fallback senza JSON1
-            like = f'%\"serial\":\"{serial}\"%'
-            cur.execute("""
-                SELECT id FROM global_catalog
-                WHERE market_params LIKE ?
-                OR catalog_key = ?
-                LIMIT 1
-            """, (like, f"serial:{serial}"))
-            found = cur.fetchone()
-        except Exception as e:
-            print(e)
-            err = True
-
-        if found or err :
-            conn.close()
-            return found['id'] if isinstance(found, dict) else found[0]
-
-        # 2) INSERT (se non trovato)
-        now = datetime.utcnow().isoformat()
-
-        # prepara payload coerente
-        idents = dict({})
-        idents['serial'] = serial
-        try:
-            mp = dict(jl or {})
-            mp.setdefault('serial', serial)
-        except Exception as e:
-            print(e)
-
-        links = list([])
-
-        # catalog_key univoca basata su serial
-        catalog_key = f"serial:{serial}"
-
-        try:
-            cur.execute("""
-                INSERT INTO global_catalog
-                    (catalog_key, canonical_name, category, identifiers, market_params, info_links, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?)
-            """, (
-                catalog_key,
-                serial.strip(),
-                (category or '').strip() or None,
-                json.dumps(idents, ensure_ascii=False),
-                json.dumps(mp, ensure_ascii=False),
-                json.dumps(links, ensure_ascii=False),
-                now, now
-            ))
-            gid = cur.lastrowid
-            conn.commit()
-            conn.close()
-            return gid
-        except sqlite3.IntegrityError:
-            # In caso di race condition sul UNIQUE(catalog_key), rileggo
-            try:
-                cur.execute("SELECT id FROM global_catalog WHERE catalog_key = ? LIMIT 1", (catalog_key,))
-                row = cur.fetchone()
-                conn.close()
-                if row:
-                    return row['id'] if isinstance(row, dict) else row[0]
-                raise
-            except Exception:
-                conn.close()
-                raise
 
     @app.route('/api/items/<int:item_id>', methods=['PUT'])
     @require_login
@@ -828,7 +549,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                     user_ref = None
                     user_id_ses = session.get('user_id')
                     if user_id_ses:
-                        conn_ref = get_db_connection()
+                        conn_ref = db.get_db_connection(app.config['DATABASE'])
                         cur_ref = conn_ref.cursor()
                         cur_ref.execute("SELECT ref_currency FROM users WHERE id = ?", (user_id_ses,))
                         row_ref = cur_ref.fetchone()
@@ -864,7 +585,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             # Ensure only the owner can update the item
             user_id_ses = session.get('user_id')
             values.append(user_id_ses)
-            conn = get_db_connection()
+            conn = db.get_db_connection(app.config['DATABASE'])
             cur = conn.cursor()
             cur.execute(f"UPDATE items SET {', '.join(fields)} WHERE id = ? AND user_id = ?", values)
             if cur.rowcount == 0:
@@ -873,9 +594,6 @@ def create_app(db_path: str = "database.db") -> Flask:
                 return jsonify({'error': 'Item not found or unauthorized'}), 404
             conn.commit()
             conn.close()
-            # verifica se valido ed esiste già in global_catalog
-            #if(mp and cat):
-                #ensure_global_by_serial(mp,cat)
             return jsonify({'message': 'Item updated'})
         else:
             data = request.get_json() or {}
@@ -894,7 +612,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                     user_ref = None
                     user_id_ses = session.get('user_id')
                     if user_id_ses:
-                        conn_ref = get_db_connection()
+                        conn_ref = db.get_db_connection(app.config['DATABASE'])
                         c_ref = conn_ref.cursor()
                         c_ref.execute("SELECT ref_currency FROM users WHERE id = ?", (user_id_ses,))
                         row_ref = c_ref.fetchone()
@@ -918,7 +636,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             values.append(item_id)
             user_id_ses = session.get('user_id')
             values.append(user_id_ses)
-            conn = get_db_connection()
+            conn = db.get_db_connection(app.config['DATABASE'])
             cur = conn.cursor()
             cur.execute(f"UPDATE items SET {', '.join(fields)} WHERE id = ? AND user_id = ?", values)
             if cur.rowcount == 0:
@@ -926,9 +644,6 @@ def create_app(db_path: str = "database.db") -> Flask:
                 return jsonify({'error': 'Item not found or unauthorized'}), 404
             conn.commit()
             conn.close()
-            # verifica se valido ed esiste già in global_catalog
-            if(mp and cat):
-                ensure_global_by_serial(mp,cat)
             return jsonify({'message': 'Item updated'})
 
     @app.route('/api/items/<int:item_id>', methods=['DELETE'])
@@ -939,7 +654,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         """
         # Delete only if the item belongs to the current user
         user_id = session.get('user_id')
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("DELETE FROM items WHERE id = ? AND user_id = ?", (item_id, user_id))
         if cur.rowcount == 0:
@@ -980,7 +695,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         user_id = session.get('user_id')
         if not user_id:
             return jsonify({'error': 'Unauthorized'}), 401
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT id, username, nickname, ref_currency, theme FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
@@ -998,7 +713,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         in JSON format. Used by the front-end to refresh stats manually.
         """
         user_id = session.get('user_id')
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
@@ -1023,7 +738,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         user_id = session.get('user_id')
         if user_id is None:
             return jsonify({'error': 'Unauthorized'}), 401
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT * FROM items WHERE id = ? AND user_id = ?", (item_id, user_id))
         item = cur.fetchone()
@@ -1059,7 +774,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             if not username or not password:
                 return jsonify({'error': 'Username e password sono obbligatori.'}), 400
             # Verifica unicità username
-            conn = get_db_connection()
+            conn = db.get_db_connection(app.config['DATABASE'])
             cur = conn.cursor()
             cur.execute("SELECT id FROM users WHERE username = ?", (username,))
             if cur.fetchone():
@@ -1097,7 +812,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         """
         Return a list of all users for administration purposes. Visible only to admin.
         """
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT id, username, nickname, ref_currency FROM users")
         users = [dict(row) for row in cur.fetchall()]
@@ -1119,7 +834,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         ref_currency = data.get('ref_currency')
         if not username or not password:
             return jsonify({'error': 'Username and password are required'}), 400
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         try:
             cur.execute(
@@ -1160,7 +875,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         if not fields:
             return jsonify({'error': 'No fields to update'}), 400
         values.append(uid)
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         try:
             cur.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
@@ -1186,7 +901,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         admin_id = session.get('user_id')
         if uid == admin_id:
             return jsonify({'error': 'Cannot delete currently logged in admin'}), 400
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         # Delete user and cascade delete items
         cur.execute("DELETE FROM users WHERE id = ?", (uid,))
@@ -1204,7 +919,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         of collection statistics similar to the profile page without the edit form.
         """
         user_id = session.get('user_id')
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
@@ -1225,7 +940,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         category = request.args.get('category', '', type=str).strip().lower()
         tags_param = request.args.get('tags', '', type=str).strip().lower()
         tags_filter = [t.strip() for t in tags_param.split(',') if t.strip()] if tags_param else []
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         # Filter items by logged-in user
         user_id = session.get('user_id')
@@ -1296,7 +1011,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         Display and edit the logged-in user's profile. Supports GET (view) and POST (update).
         """
         user_id = session.get('user_id')
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         if request.method == 'POST':
             form = request.form
@@ -1372,7 +1087,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         if not item_id:
             return jsonify({'error': 'Missing item_id'}), 400
 
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
         row = cur.fetchone()
@@ -1482,7 +1197,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         item_id = request.args.get('item_id', type=int)
         if not item_id:
             return jsonify({'error':'Missing item_id'}), 400
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT date, avg, median, min, max, count, currency, keywords FROM ebay_price_history WHERE item_id = ? ORDER BY date ASC", (item_id,))
         rows = cur.fetchall(); conn.close()
@@ -1497,7 +1212,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         item_id = request.args.get('item_id', type=int)
         if not item_id:
             return jsonify({'error':'Missing item_id'}), 400
-        conn = get_db_connection(); cur = conn.cursor()
+        conn = db.get_db_connection(app.config['DATABASE'])
+        cur = conn.cursor()
         cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
         row = cur.fetchone(); conn.close()
         if not row: return jsonify({'error':'Item not found'}), 404
@@ -1557,7 +1273,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             return jsonify({'error': 'Missing item_id'}), 400
 
         # --- carica item ---
-        conn = get_db_connection()
+        conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
         cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
         row = cur.fetchone()
@@ -1803,7 +1519,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         item_id = request.args.get('item_id', type=int)
         if not item_id:
             return jsonify({'error': 'Missing item_id'}), 400
-        conn = get_db_connection(); cur = conn.cursor()
+        conn = db.get_db_connection(app.config['DATABASE'])
+        cur = conn.cursor()
         cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
         row = cur.fetchone(); conn.close()
         if not row: return jsonify({'error':'Item not found'}), 404
@@ -1864,7 +1581,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         if not item_id:
             return jsonify({'error': 'Missing item_id'}), 400
 
-        conn = get_db_connection(); cur = conn.cursor()
+        conn = db.get_db_connection(app.config['DATABASE'])
+        cur = conn.cursor()
         cur.execute("SELECT * FROM items WHERE id=?", (item_id,))
         row = cur.fetchone(); conn.close()
         if not row: return jsonify({'error':'Item not found'}), 404
@@ -1991,7 +1709,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         item_id = request.args.get('item_id', type=int)
         if not item_id:
             return jsonify({'error':'Missing item_id'}), 400
-        conn = get_db_connection(); cur = conn.cursor()
+        conn = db.get_db_connection(app.config['DATABASE'])
+        cur = conn.cursor()
         cur.execute("SELECT * FROM items WHERE id = ?", (item_id,))
         row = conn.fetchone(); conn.close()
         if not row: return jsonify({'error':'Item not found'}), 404
@@ -2091,14 +1810,6 @@ def create_app(db_path: str = "database.db") -> Flask:
             market={'lastSale': base_val*1.05, 'lowestAsk': base_val*1.1, 'highestBid': base_val*0.95}
             result['market']=market; result['stats']=_stats(market)
         return jsonify(result), 200
-        """
-    def ensure_global_by_serial(serial: str, *, canonical_name: str, category: str = None,
-                                market_params: dict = None, identifiers: dict = None,
-                                info_links: list = None) -> int:
-        
-        Cerca nel global_catalog per 'serial' (in identifiers/market_params o catalog_key),
-        se non esiste inserisce un nuovo record e ritorna l'id.
-        """
 
     @app.route('/api/code-resolve', methods=['POST'])
     @require_login
@@ -2220,6 +1931,187 @@ def create_app(db_path: str = "database.db") -> Flask:
         except Exception as e:
             return jsonify({'error': str(e), 'query': query_used}), 200
 
+    @app.route('/api/global-catalog/ensure-or-resolve', methods=['POST'])
+    @require_login
+    def api_gc_ensure_or_resolve():
+        # verifica se valido ed esiste già in global_catalog
+        # if(data.get('market_params') and data.get('category')):
+        data = request.get_json(silent=True) or {}
+        category = data.get('category') or ''
+        market_params = json.dumps(data.get('market_params') or {}, ensure_ascii=False)
+        hint_name = data.get('hint_name') or None
+        gid = gc.ensure_global_by_identifiers(market_params, category, hint_name)
+        return jsonify({'global_id': gid}), 200
+
+    @app.route('/api/global-catalog/<int:gid>/refresh', methods=['POST'])
+    @require_login
+    def api_gc_refresh(gid):
+        # Legge market_params & category dal GC
+        conn = db.get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT category, market_params FROM global_catalog WHERE id=?", (gid,))
+        row = cur.fetchone(); conn.close()
+        if not row:
+            return jsonify({'error':'Global not found'}), 404
+        category = row['category'] if isinstance(row, dict) else row[0]
+        mp = json.loads((row['market_params'] if isinstance(row, dict) else row[1]) or "{}")
+        name_hint = (mp.get('title') or mp.get('name') or '').strip()
+
+        results = {}
+
+        # --- eBay (derivato dal tuo /api/ebay-estimate) ---
+        try:
+            EBAY_APP_ID = os.environ.get("EBAY_CLIENT_ID") or ''
+            site_id = os.getenv('EBAY_SITE_ID', '101')
+            keywords = " ".join([x for x in [
+                name_hint, mp.get('language'), category, mp.get('condition')
+            ] if x]).strip() or "collectible"
+
+            payload = {
+                'OPERATION-NAME': 'findCompletedItems',
+                'SERVICE-VERSION': '1.13.0',
+                'SECURITY-APPNAME': EBAY_APP_ID,
+                'RESPONSE-DATA-FORMAT': 'JSON',
+                'REST-PAYLOAD': 'true',
+                'keywords': keywords,
+                'paginationInput.entriesPerPage': '50',
+                'itemFilter(0).name':'SoldItemsOnly',
+                'itemFilter(0).value':'true',
+                'siteid': site_id
+            }
+            r = requests.get("https://svcs.ebay.com/services/search/FindingService/v1", params=payload, timeout=8)
+            r.raise_for_status()
+            data = r.json()
+            items = (((data or {}).get('findCompletedItemsResponse') or [{}])[0].get('searchResult') or [{}])[0].get('item', [])
+            prices = []
+            for it in items:
+                selling = ((it.get('sellingStatus') or [{}])[0])
+                if (selling.get('sellingState') or [''])[0] != 'EndedWithSales':
+                    continue
+                curr_price = ((it.get('sellingStatus') or [{}])[0].get('currentPrice') or [{}])[0]
+                price_val  = float(curr_price.get('__value__', '0') or 0)
+                conv       = ((it.get('sellingStatus') or [{}])[0].get('convertedCurrentPrice') or [{}])[0]
+                if conv and conv.get('__value__'):
+                    price_val = float(conv.get('__value__', price_val) or price_val)
+                prices.append(price_val)
+            if prices:
+                import statistics
+                stats = {
+                    'avg': sum(prices)/len(prices),
+                    'median': statistics.median(prices),
+                    'min': min(prices),
+                    'max': max(prices),
+                    'samples_count': len(prices)
+                }
+                hlp.record_price_snapshot(gid, 'ebay', stats, {'url':'FindingService', 'params': payload})
+                results['ebay'] = stats
+        except Exception:
+            pass
+
+        # --- PriceCharting (derivato dal tuo /api/pricecharting-estimate) ---
+        try:
+            tok = os.environ.get('PRICECHARTING_TOKEN') or ''
+            q = (name_hint or '').strip()
+            if q:
+                r = requests.get('https://www.pricecharting.com/api/product', params={'q': q, 't': tok}, timeout=8)
+                r.raise_for_status()
+                jsn = r.json() if r.headers.get('Content-Type','').startswith('application/json') else {}
+                # calcolo semplice (es. loose/complete/new se presenti)
+                vals = [float(jsn.get(k) or 0) for k in ['loose-price','cib-price','new-price'] if jsn.get(k)]
+                if vals:
+                    import statistics
+                    stats = {
+                        'avg': sum(vals)/len(vals),
+                        'median': statistics.median(vals),
+                        'min': min(vals),
+                        'max': max(vals),
+                        'samples_count': len(vals)
+                    }
+                    hlp.record_price_snapshot(gid, 'pricecharting', stats, {'endpoint':'/api/product','q':q})
+                    results['pricecharting'] = stats
+        except Exception:
+            pass
+
+        return jsonify({'global_id': gid, 'results': results}), 200
+
+    @app.route('/api/global-catalog/<int:gid>/prices', methods=['GET'])
+    @require_login
+    def api_gc_prices(gid):
+        source = request.args.get('source')  # opzionale
+        since  = request.args.get('since')   # 'YYYY-MM-DD' opzionale
+        conn = db.get_db_connection(); cur = conn.cursor()
+        sql = "SELECT ref_date, source, samples_count, avg, median, min, max FROM global_catalog_prices WHERE global_id=?"
+        params = [gid]
+        if source:
+            sql += " AND source=?"; params.append(source)
+        if since:
+            sql += " AND ref_date>=?"; params.append(since)
+        sql += " ORDER BY ref_date ASC"
+        cur.execute(sql, params)
+        rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return jsonify(rows), 200
+
+    @app.route('/api/global-catalog/search', methods=['GET'])
+    @require_login
+    def api_gc_search():
+        q = (request.args.get('q') or '').strip().lower()
+        cat = (request.args.get('category') or '').strip().lower()
+        conn = db.get_db_connection(); cur = conn.cursor()
+        sql = "SELECT id, canonical_name, category, catalog_key FROM global_catalog WHERE 1=1"
+        params = []
+        if q:
+            sql += " AND (LOWER(canonical_name) LIKE ? OR LOWER(catalog_key) LIKE ?)"
+            params.extend([f'%{q}%', f'%{q}%'])
+        if cat:
+            sql += " AND LOWER(category)=?"; params.append(cat)
+        sql += " ORDER BY updated_at DESC LIMIT 50"
+        cur.execute(sql, params)
+        rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return jsonify(rows), 200
+
+    @app.route('/api/global-catalog/<int:gid>/summary', methods=['GET'])
+    @require_login
+    def api_gc_summary(gid):
+        conn = db.get_db_connection(); cur = conn.cursor()
+        cur.execute("SELECT id, canonical_name, category, identifiers, market_params, info_links FROM global_catalog WHERE id=?", (gid,))
+        gc = cur.fetchone()
+        if not gc: conn.close(); return jsonify({'error':'Not found'}), 404
+        cur.execute("""
+            SELECT source, ref_date, samples_count, avg, median, min, max
+            FROM global_catalog_prices WHERE global_id=? ORDER BY ref_date DESC, source ASC
+        """, (gid,))
+        prices = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return jsonify({
+            'id': gc['id'], 'canonical_name': gc['canonical_name'], 'category': gc['category'],
+            'identifiers': json.loads(gc['identifiers'] or '{}'),
+            'market_params': json.loads(gc['market_params'] or '{}'),
+            'info_links': json.loads(gc['info_links'] or '[]'),
+            'prices': prices
+        }), 200
+
+    @app.route('/api/global-catalog/<int:gid>/info-links', methods=['PUT'])
+    @require_login
+    def put_global_info_links(gid):
+        if not hlp.is_admin_user():
+            return jsonify({'error':'Only admin can update global catalog'}), 403
+        data = request.get_json(silent=True) or {}
+        links = data.get('links') or []
+        clean = []
+        if isinstance(links, list):
+            for x in links:
+                if not x: continue
+                if isinstance(x, str): u = x.strip()
+                elif isinstance(x, dict) and x.get('url'): u = str(x['url']).strip()
+                else: continue
+                if u.startswith('http://') or u.startswith('https://'):
+                    clean.append(u)
+        conn = db.get_db_connection(); cur = conn.cursor()
+        cur.execute("UPDATE global_catalog SET info_links=?, updated_at=? WHERE id=?",
+                    (json.dumps(clean, ensure_ascii=False), datetime.utcnow().isoformat(), gid))
+        conn.commit(); conn.close()
+        return jsonify({'ok': True, 'links': clean})
 
 
     return app
@@ -2230,13 +2122,11 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
 
 
-
-
-
 @app.route('/api/global-catalog/<int:gid>/info-links', methods=['GET'])
 @require_login
 def get_global_info_links(gid):
-    conn = get_db_connection(); cur = conn.cursor()
+    conn = db.get_db_connection(app.config['DATABASE'])
+    cur = conn.cursor()
     cur.execute("SELECT info_links FROM global_catalog WHERE id=?", (gid,))
     row = cur.fetchone()
     conn.close()
@@ -2268,7 +2158,8 @@ def put_global_info_links(gid):
             else: continue
             if u.startswith('http://') or u.startswith('https://'):
                 clean.append(u)
-    conn = get_db_connection(); cur = conn.cursor()
+    conn = db.get_db_connection(app.config['DATABASE'])
+    cur = conn.cursor()
     cur.execute("UPDATE global_catalog SET info_links=?, updated_at=? WHERE id=?", (json.dumps(clean, ensure_ascii=False), datetime.datetime.utcnow().isoformat(), gid))
     conn.commit(); conn.close()
     return jsonify({'ok': True, 'links': clean})

@@ -1,57 +1,53 @@
 <!DOCTYPE html>
 <html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Collector Street - La tua collezione</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}" >
-    
-    <nav style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;padding-top: 0.5%;">
-        <div class="logo-title" style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;">
-            <img id="applogo" src="/static/icons/logo-lockup.png" style="width: 40%;border-top: 0%; border-bottom: 0%; padding-bottom: 0%;" alt="App logo">
-        </div>
-        <div class="actions icons">
-            <a href="/home" class="icon-btn" title="Home" aria-label="Home">
-                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
-                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-10.5z" fill="currentColor"/>
-                </svg>
-            </a>
-            <a href="/" class="icon-btn" title="Collezione" aria-label="Collezione">
-                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
-                    <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" fill="currentColor"/>
-                </svg>
-            </a>
-            <a href="/profile" class="icon-btn" title="Profilo" aria-label="Profilo">
-                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
-                    <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z" fill="currentColor"/>
-                </svg>
-            </a>
-        </div>
-        <div class="sub-actions icons">
-            <button id="addItemBtn" class="icon-btn-text primary" title="Aggiungi item" aria-label="Aggiungi item"><svg viewBox="0 0 24 24" width="50" height="36" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z" fill="currentColor"/></svg> <b style="font-size: medium;margin-left: -7px;">Aggiungi Item</b></button>              
-        </div>
-    </nav>
-    <section class="filters">
-        <input type="text" id="searchInput" placeholder="Cerca per nome o descrizione">
-        <select id="categoryFilter">
-            <option value="">Tutte le categorie</option>
-        </select>
-        <input type="text" id="tagFilter" placeholder="Filtra per tag (es. retro, invendita)">
-    </section>
-    <section id="itemsContainer" class="items-container">
-        <!-- Carte degli item generate via JS -->
-    </section>
-    <!-- Finestra modale per inserimento/modifica item -->
-    
-    {% include 'modals/modal_edit.html' %}
-
-    {% include 'modals/modal_view.html' %}
-
-
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Collector Street - La tua collezione</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    </head>
+    <body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}" >
+        
+        <nav style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;padding-top: 0.5%;">
+            <div class="logo-title" style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;">
+                <img id="applogo" src="/static/icons/logo-lockup.png" style="width: 40%;border-top: 0%; border-bottom: 0%; padding-bottom: 0%;" alt="App logo">
+            </div>
+            <div class="actions icons">
+                <a href="/home" class="icon-btn" title="Home" aria-label="Home">
+                    <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+                        <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-10.5z" fill="currentColor"/>
+                    </svg>
+                </a>
+                <a href="/" class="icon-btn" title="Collezione" aria-label="Collezione">
+                    <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+                        <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" fill="currentColor"/>
+                    </svg>
+                </a>
+                <a href="/profile" class="icon-btn" title="Profilo" aria-label="Profilo">
+                    <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+                        <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z" fill="currentColor"/>
+                    </svg>
+                </a>
+            </div>
+            <div class="sub-actions icons">
+                <button id="addItemBtn" class="icon-btn-text primary" title="Aggiungi item" aria-label="Aggiungi item"><svg viewBox="0 0 24 24" width="50" height="36" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z" fill="currentColor"/></svg> <b style="font-size: medium;margin-left: -7px;">Aggiungi Item</b></button>              
+            </div>
+        </nav>
+        <section class="filters">
+            <input type="text" id="searchInput" placeholder="Cerca per nome o descrizione">
+            <select id="categoryFilter">
+                <option value="">Tutte le categorie</option>
+            </select>
+            <input type="text" id="tagFilter" placeholder="Filtra per tag (es. retro, invendita)">
+        </section>
+        <section id="itemsContainer" class="items-container">
+            <!-- Carte degli item generate via JS -->
+        </section>
+        <!-- Finestra modale per inserimento/modifica item -->       
+        {% include 'modals/modal_edit.html' %}
+        {% include 'modals/modal_view.html' %}
+        <script type="module" src="{{ url_for('static', filename='script.js') }}"></script>
+    </body>
 </html>
 
             
