@@ -1,283 +1,53 @@
 <!DOCTYPE html>
 <html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Collector Street - La tua collezione</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-</head>
-<body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}" >
-    
-    <nav style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;padding-top: 0.5%;">
-        <div class="logo-title" style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;">
-            <img id="applogo" src="/static/icons/logo-lockup.png" style="width: 40%;border-top: 0%; border-bottom: 0%; padding-bottom: 0%;" alt="App logo">
-        </div>
-        <div class="actions icons">
-            <a href="/home" class="icon-btn" title="Home" aria-label="Home">
-                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
-                    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-10.5z" fill="currentColor"/>
-                </svg>
-            </a>
-            <a href="/" class="icon-btn" title="Collezione" aria-label="Collezione">
-                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
-                    <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" fill="currentColor"/>
-                </svg>
-            </a>
-            <a href="/profile" class="icon-btn" title="Profilo" aria-label="Profilo">
-                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
-                    <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z" fill="currentColor"/>
-                </svg>
-            </a>
-        </div>
-        <div class="sub-actions icons">
-            <button id="addItemBtn" class="icon-btn-text primary" title="Aggiungi item" aria-label="Aggiungi item"><svg viewBox="0 0 24 24" width="50" height="36" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z" fill="currentColor"/></svg> <b style="font-size: medium;margin-left: -7px;">Aggiungi Item</b></button>              
-        </div>
-    </nav>
-    <section class="filters">
-        <input type="text" id="searchInput" placeholder="Cerca per nome o descrizione">
-        <select id="categoryFilter">
-            <option value="">Tutte le categorie</option>
-        </select>
-        <input type="text" id="tagFilter" placeholder="Filtra per tag (es. retro, invendita)">
-    </section>
-    <section id="itemsContainer" class="items-container">
-        <!-- Carte degli item generate via JS -->
-    </section>
-    <!-- Finestra modale per inserimento/modifica item -->
-    
-<div id="itemModal" class="modal hidden">
-    <div class="modal-content">
-        <span class="close" id="modalClose">&times;</span>
-        <h2 id="modalTitle">Nuovo Item</h2>
-        <form id="itemForm">
-            <input type="hidden" id="itemId">
-
-            <!-- Sezione base: visibile subito -->
-            <div class="modal-section basic-fields">
-                <input type="text" id="itemName" placeholder="Nome" required
-                       title="Nome — Il titolo con cui identifichi l'item (obbligatorio).">
-                <textarea id="itemDescription" placeholder="Descrizione"
-                          title="Descrizione — Dettagli, note o varianti dell'item."></textarea>
-                <select id="itemCategory" 
-                       title="Categoria — Es. 'trading card', 'console', 'action figure', 'videogame'."
-                       placeholder="Categoria">
-                    <option value="vinyl">Vinyl</option>
-                    <option value="cd">CD</option>
-                    <option value="tradingcard">Trading Card</option>
-                    <option value="shoes">Snickers / Shoes</option>
-                    <option value="actionfigure">Action Figure</option>
-                    <option value="lego">Lego</option>
-                    <option value="console">Console</option>
-                    <option value="videogame">Videogame</option>
-                </select>       
-                <select id="itemLanguage"
-                        title="Lingua — Lingua/edizione dell'item (ITA/ENG/JAP ecc.)."
-                        placeholder="Lingua">
-                    <option value="ITA">ITA</option>
-                    <option value="ENG">ENG</option>
-                    <option value="JAP">JAP</option>
-                    <option value="KOR">KOR</option>
-                    <option value="CHS">CHS</option>
-                </select>
-                <input type="text" id="itemTags" placeholder="Tag (separati da virgola)"
-                       title="Tag — Parole chiave per filtrare/ricercare. Separale con virgole.">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Collector Street - La tua collezione</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    </head>
+    <body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}" >
+        
+        <nav style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;padding-top: 0.5%;">
+            <div class="logo-title" style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;">
+                <img id="applogo" src="/static/icons/logo-lockup.png" style="width: 40%;border-top: 0%; border-bottom: 0%; padding-bottom: 0%;" alt="App logo">
             </div>
-
-            <button type="button" id="toggleAdvancedBtn" class="toggle-advanced">Altre informazioni</button>
-
-            <!-- Sezione avanzata: gruppi tematici -->
-            <div class="modal-section advanced-fields hidden">
-
-                <h3 class="section-title">Acquisto</h3>
-                <div class="field-row"
-                     title="Prezzo di acquisto — Valore pagato, con la sua valuta.">
-                    <input type="number" step="0.01" id="purchasePrice" placeholder="Prezzo di acquisto">
-                    <select id="currency" aria-label="Valuta del prezzo di acquisto"
-                            title="Valuta — Valuta del prezzo di acquisto.">
-                        <option value="EUR">EUR</option>
-                        <option value="USD">USD</option>
-                        <option value="JPY">JPY</option>
-                        <option value="GBP">GBP</option>
-                        <option value="CNY">CNY</option>
-                    </select>
-                </div>
-                <div class="hint" id="purchasePriceHint"></div>
-
-                <input type="date" id="purchaseDate" placeholder="Data di acquisto"
-                       title="Data di acquisto — Quando hai acquistato l'item.">
-                <div class="hint" id="purchaseDateHint"></div>
-
-                <div class="field-row"
-                     title="Prezzo in valuta di riferimento — Importo nella tua valuta profilo; l'etichetta a destra indica la valuta (sola lettura).">
-                    <input type="number" step="0.01" id="purchasePriceRef" placeholder="Prezzo (valuta rif)">
-                    <span class="inline-suffix" id="refCurrencyLabel">EUR</span>
-                </div>
-                <div class="hint" id="purchasePriceRefHint"></div>
-
-                <h3 class="section-title">Vendita</h3>
-                <input type="number" step="0.01" id="salePrice" placeholder="Prezzo di vendita"
-                       title="Prezzo di vendita — Valore di vendita (se venduto).">
-                <div class="hint" id="salePriceHint"></div>
-                <input type="date" id="saleDate" placeholder="Data di vendita"
-                       title="Data di vendita — Quando è stato venduto (se venduto).">
-                <div class="hint" id="saleDateHint"></div>
-
-                <h3 class="section-title">Dettagli</h3>
-                <input type="number" min="1" id="quantity" placeholder="Quantità" value="1"
-                       title="Quantità — Numero di unità possedute.">
-                <div class="hint" id="quantityHint"></div>
-                <select id="condition"
-                        title="Condizione — Stato di conservazione (MT/NM/EXC/GD/LP/PL/POOR).">
-                    <option value="">Seleziona condizione</option>
-                    <option value="MT">MT</option>
-                    <option value="NM">NM</option>
-                    <option value="EXC">EXC</option>
-                    <option value="GD">GD</option>
-                    <option value="LP">LP</option>
-                    <option value="PL">PL</option>
-                    <option value="POOR">POOR</option>
-                </select>
-
-                <h3 class="section-title">Link marketplace</h3>
-                <input type="url" id="marketplaceLink" placeholder="Link marketplace"
-                       title="Link marketplace — URL annuncio o pagina di riferimento.">
-                <div class="hint" id="marketplaceLinkHint"></div>
-
-                <h3 class="section-title">Foto</h3>
-                <input type="file" id="image" accept="image/*"
-                       title="Immagine — Carica una foto per l'item.">
-
-                <input type="number" min="1" id="globalId" placeholder="Quantità" value="2"
-                       title="Global ID">
-
-<!--                 <h3 class="section-title">Link informativi</h3>
-                <div id="infoLinksSection" class="section-grid advanced-grid">
-                  <div class="full">
-                    <div class="hstack">
-                      <input type="url" id="infoLinkInput" placeholder="https://…">
-                      <button id="btnAddInfoLink" class="btn small" title="Aggiungi link">+</button>
-                      <button id="btnSaveInfoLinks" class="btn small" title="Salva">Salva</button>
-                    </div>
-                    <div id="infoLinksList" class="links-list"></div>
-                    <small class="hint">Aggiungi uno o più link utili. I link sono salvati sul Catalogo Globale dell’oggetto.</small>
-                  </div>
-                </div> -->
-
-                <div id="marketParamsFields"></div>
-
-                <h3 class="section-title">Link informativi (Item)</h3>
-                <div id="infoLinksItemSection" class="section-grid advanced-grid">
-                <div class="full">
-                    <div class="hstack">
-                    <input type="url" id="infoLinkItemInput" placeholder="https://…" />
-                    <button id="btnAddInfoLinkItem" class="btn small" title="Aggiungi link">+</button>
-                    </div>
-                    <div id="infoLinksItemList" class="links-list"></div>
-                    <small class="hint">Questi link sono legati all’<strong>item</strong> (non al catalogo globale).</small>
-                </div>
-                </div>
-
-                <h3 class="section-title">Link marketplace (Item)</h3>
-                <div id="marketplaceLinksItemSection" class="section-grid advanced-grid">
-                <div class="full">
-                    <div class="hstack">
-                    <input type="url" id="marketplaceLinkItemInput" placeholder="https:// (inserisci URL annuncio / vendita)" />
-                    <button id="btnAddMarketplaceLinkItem" class="btn small" title="Aggiungi link">+</button>
-                    </div>
-                    <div id="marketplaceLinksItemList" class="links-list"></div>
-                    <small class="hint">Puoi inserire più link (eBay, Vinted, Subito, ecc.).</small>
-                </div>
-                </div>
+            <div class="actions icons">
+                <a href="/home" class="icon-btn" title="Home" aria-label="Home">
+                    <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+                        <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-10.5z" fill="currentColor"/>
+                    </svg>
+                </a>
+                <a href="/" class="icon-btn" title="Collezione" aria-label="Collezione">
+                    <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+                        <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" fill="currentColor"/>
+                    </svg>
+                </a>
+                <a href="/profile" class="icon-btn" title="Profilo" aria-label="Profilo">
+                    <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
+                        <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z" fill="currentColor"/>
+                    </svg>
+                </a>
             </div>
-            <button type="submit">Salva</button>
-        </form>
-    </div>
-</div>
-
-<div id="viewItemModal" class="modal hidden">
-  <div class="modal-content view-item">
-    <span class="close" id="viewItemClose">&times;</span>
-
-    <div class="view-header">
-      <h2 id="viewName"></h2>
-    </div>
-
-    <div class="view-body">
-        <div class="view-top">
-            <div class="view-media fixed">
-                <img id="viewImage" alt="Foto item">
+            <div class="sub-actions icons">
+                <button id="addItemBtn" class="icon-btn-text primary" title="Aggiungi item" aria-label="Aggiungi item"><svg viewBox="0 0 24 24" width="50" height="36" aria-hidden="true"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z" fill="currentColor"/></svg> <b style="font-size: medium;margin-left: -7px;">Aggiungi Item</b></button>              
             </div>
-        </div>
-
-        <div class="view-media legacy" style="display:none">
-            <img id="viewImage" alt="Foto item">
-        </div>
-
-        <div class="view-grid">
-            <div class="chiplist" id="viewChips"></div>
-            <div class="full" style="border-top: -20px;"><span class="label">Descrizione</span><span id="viewDescription"></span></div>
-            <div class="full"><span class="label">Link item</span>
-                <div id="viewInfoLinks" class="link-list"></div>
-            </div>
-            <div style="display: flex; flex-direction: row;" class="full">
-                <div style="width: 30%;"><span class="label" style="border-right: 10px;">Prezzo acquisto</span><span id="viewPurchase"></span></div>
-                <div style="width: 30%;"><span class="label" style="border-right: 10px;">Data acquisto</span><span id="viewPurchaseDate"></span></div>
-                <div><span class="label" style="border-left: 10px;">Giorni in collezione</span><span id="viewDaysInCollection"></span></div>
-            </div>
-            <div style="display: flex; flex-direction: row;" class="full">
-                <div style="width: 30%;"><span class="label">Prezzo vendita</span><span id="viewSale"></span></div>
-                <div style="width: 30%;"><span class="label">Data vendita</span><span id="viewSaleDate"></span></div>
-            </div>
-
-            <div class="full"><span class="label">Link marketplace</span>
-                <div id="viewMarketplaceLinks" class="link-list"></div>
-            </div>
-            <div class="full">
-                <span class="label" style="margin-bottom: 16px;">Tag</span>
-                <div class="tag-view" id="viewTagList"></div>
-            </div>
-        </div>
-
-      <div class="market-estimate">
-        <div class="est-header">
-            <div style="vertical-align: auto; width: 40%;">
-                <h3>Stima prezzo a mercato</h3>
-                <img id="ebaylogo" src="/static/icons/ebay_logo.svg" class="logo-api" alt="eBay logo">
-            </div>
-            <div style="vertical-align: auto; width: 60%;">
-                <p>Criterio Stima: Venduti di recente</p>
-                <small id="estSource"></small>
-                <br>
-                <small id="estQuery"></small>
-            </div>
-        </div>
-        <div id="estContent" class="est-content">
-          <em>Nessuna stima disponibile.</em>
-        </div>
-      </div>
-    
-      <div class="market-estimate">
-        <div class="est-header">
-          <div style="vertical-align: auto; width: 40%;">
-                <h3>Stima prezzo a mercato</h3>
-                <img id="2mLogo" src="" class="logo-api" alt="API logo">
-            </div>
-            <div style="vertical-align: auto; width: 60%;">
-                <p style="border-bottom: 5px;">Criterio Stima: Prezzi Correnti</p>
-                <small id="2mSource"></small>
-                <br>
-                <small id="2mQuery"></small>
-            </div>
-        </div>
-        <div id="2mContent" class="est-content">
-          <em>Nessuna stima disponibile.</em>
-        </div>
-      </div>
-</div>
-  </div>
-</div>
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
+        </nav>
+        <section class="filters">
+            <input type="text" id="searchInput" placeholder="Cerca per nome o descrizione">
+            <select id="categoryFilter">
+                <option value="">Tutte le categorie</option>
+            </select>
+            <input type="text" id="tagFilter" placeholder="Filtra per tag (es. retro, invendita)">
+        </section>
+        <section id="itemsContainer" class="items-container">
+            <!-- Carte degli item generate via JS -->
+        </section>
+        <!-- Finestra modale per inserimento/modifica item -->       
+        {% include 'modals/modal_edit.html' %}
+        {% include 'modals/modal_view.html' %}
+        <script type="module" src="{{ url_for('static', filename='script.js') }}"></script>
+    </body>
 </html>
 
             

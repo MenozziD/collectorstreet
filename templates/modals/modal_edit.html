@@ -1,0 +1,155 @@
+<div id="itemModal" class="modal hidden">
+    <div class="modal-content">
+        <span class="close" id="modalClose">&times;</span>
+        <h2 id="modalTitle">Nuovo Item</h2>
+        <form id="itemForm">
+            <input type="hidden" id="itemId">
+
+            <!-- Sezione base: visibile subito -->
+            <div class="modal-section basic-fields">
+                <small class="hint-field">Nome</small>
+                <input type="text" id="itemName" placeholder="Nome" required
+                       title="Nome — Il titolo con cui identifichi l'item (obbligatorio).">
+                <small class="hint-field">Descrizione</small>
+                <textarea id="itemDescription" placeholder="Descrizione"
+                          title="Descrizione — Dettagli, note o varianti dell'item."></textarea>
+                <small class="hint-field">Categoria</small>
+                <select id="itemCategory" 
+                       title="Categoria — Es. 'trading card', 'console', 'action figure', 'videogame'."
+                       placeholder="Categoria">
+                    <option value="vinyl">Vinyl</option>
+                    <option value="cd">CD</option>
+                    <option value="tradingcard">Trading Card</option>
+                    <option value="shoes">Snickers / Shoes</option>
+                    <option value="actionfigure">Action Figure</option>
+                    <option value="lego">Lego</option>
+                    <option value="console">Console</option>
+                    <option value="videogame">Videogame</option>
+                </select>
+                <small class="hint-field">Lingua</small>       
+                <select id="itemLanguage"
+                        title="Lingua — Lingua/edizione dell'item (ITA/ENG/JAP ecc.)."
+                        placeholder="Lingua">
+                    <option value="ITA">ITA</option>
+                    <option value="ENG">ENG</option>
+                    <option value="JAP">JAP</option>
+                    <option value="KOR">KOR</option>
+                    <option value="CHS">CHS</option>
+                </select>
+                <small class="hint-field">Taglist</small> 
+                <input type="text" id="itemTags" placeholder="Tag (separati da #)"
+                       title="Tag — Parole chiave per filtrare/ricercare. Separale con #.">
+            </div>
+
+            <button type="button" id="toggleAdvancedBtn" class="toggle-advanced">Altre informazioni</button>
+
+            <!-- Sezione avanzata: gruppi tematici -->
+            <div class="modal-section advanced-fields hidden">
+
+                <h3 class="section-title">Dettagli</h3>
+                <div class="hstack">
+                    <div style="vertical-align: auto; align-items: center;">
+                        <small class="hint-field">Quantità</small>
+                        <input type="number" min="1" id="quantity" placeholder="Quantità" value="1"
+                            title="Quantità — Numero di unità possedute.">
+                        <div class="hint" id="quantityHint"></div>
+                    </div>
+                    <div style="vertical-align: auto; align-items: center;">
+                        <small class="hint-field">Condizione</small>
+                        <select id="condition"
+                                title="Condizione — Stato di conservazione (MT/NM/EXC/GD/LP/PL/POOR).">
+                            <option value="">Seleziona condizione</option>
+                            <option value="MT">MT</option>
+                            <option value="NM">NM</option>
+                            <option value="EXC">EXC</option>
+                            <option value="GD">GD</option>
+                            <option value="LP">LP</option>
+                            <option value="PL">PL</option>
+                            <option value="POOR">POOR</option>
+                        </select>
+                    </div>
+                </div>
+                <small class="hint-field">Link Info</small>
+                <div id="infoLinksItemSection" class="section-grid advanced-grid">
+                    
+                <div class="full">
+                    <div class="hstack">
+                    <input type="url" id="infoLinkItemInput" placeholder="https://…" />
+                    <button id="btnAddInfoLinkItem" class="btn small" title="Aggiungi link">+</button>
+                    </div>
+                    <div id="infoLinksItemList" class="links-list"></div>
+                    <small class="hint">Questi link sono legati all’<strong>item</strong> (non al catalogo globale).</small>
+                </div>
+                </div>
+
+                <h3 class="section-title">Acquisto</h3>
+                <div class="hstack">
+                    <div style="vertical-align: auto; align-items: center;">
+                        <small class="hint-field">Prezzo Acquisto</small>
+                        <div class="field-row">
+                            <input type="number" step="0.01" id="purchasePrice" placeholder="Prezzo di acquisto">
+                            <select id="currency" aria-label="Valuta del prezzo di acquisto" title="Valuta — Valuta del prezzo di acquisto.">
+                                <option value="EUR">EUR</option>
+                                <option value="USD">USD</option>
+                                <option value="JPY">JPY</option>
+                                <option value="GBP">GBP</option>
+                                <option value="CNY">CNY</option>
+                            </select>
+                        </div>
+                        
+                    </div>
+                    <div style="vertical-align: auto; align-items: center;">
+                        <small class="hint-field">Data Acquisto</small>
+                        <input type="date" id="purchaseDate" placeholder="Data di acquisto" title="Data di acquisto — Quando hai acquistato l'item.">
+                        <div class="hint" id="purchaseDateHint"></div>                       
+                    </div>
+                </div>
+                <div style="vertical-align: auto; align-items: center; padding-right: 43.2%; margin-top: -14px;">
+                    <small class="hint-field">Prezzo Acquisto in valuta</small>
+                    <div class="field-row">
+                        <input type="number" step="0.01" id="purchasePriceRef" placeholder="Prezzo (valuta rif)">
+                        <span class="inline-suffix" id="refCurrencyLabel">EUR</span>
+                    </div>
+                </div>
+                <div class="hint" id="purchasePriceHint"></div>
+
+                <h3 class="section-title">Vendita</h3>
+                <div class="hstack">
+                    <div style="vertical-align: auto; align-items: center;">
+                        <small class="hint-field">Prezzo Vendita</small>
+                        <div class="field-row">
+                            <input type="number" step="0.01" id="salePrice" placeholder="Prezzo di vendita" title="Prezzo di vendita — Valore di vendita (se venduto).">
+                            <span class="inline-suffix" id="refCurrencyLabel">EUR</span>
+                        </div>
+                        <div class="hint" id="salePriceHint"></div>
+                    </div>
+                    <div style="vertical-align: auto; align-items: center;">
+                        <small class="hint-field">Data Vendita</small>
+                        <input type="date" id="saleDate" placeholder="Data di vendita" title="Data di vendita — Quando è stato venduto (se venduto).">
+                    <div class="hint" id="saleDateHint"></div>
+                </div>
+                </div>
+
+
+                <h3 class="section-title">Foto</h3>
+                <input type="file" id="image" accept="image/*"
+                       title="Immagine — Carica una foto per l'item.">
+
+                <h3 class="section-title">Link marketplace (Item)</h3>
+                <div id="marketplaceLinksItemSection" class="section-grid advanced-grid">
+                <div class="full">
+                    <div class="hstack">
+                    <input type="url" id="marketplaceLinkItemInput" placeholder="https:// (inserisci URL annuncio / vendita)" />
+                    <button id="btnAddMarketplaceLinkItem" class="btn small" title="Aggiungi link">+</button>
+                    </div>
+                    <div id="marketplaceLinksItemList" class="links-list"></div>
+                    <small class="hint">Puoi inserire più link (eBay, Vinted, Subito, ecc.).</small>
+                </div>
+                </div>
+
+                <div id="marketParamsFields" class="mp-grid"></div>
+            </div>
+            <button type="submit" class="icon-btn primary">Salva</button>
+        </form>
+    </div>
+</div>

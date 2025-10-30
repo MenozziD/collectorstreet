@@ -1,0 +1,82 @@
+<div id="viewItemModal" class="modal hidden">
+  <div class="modal-content view-item">
+    <span class="close" id="viewItemClose">&times;</span>
+
+    <div class="view-header">
+      <h2 id="viewName"></h2>
+    </div>
+
+    <div class="view-body">
+      <div class="view-top">
+            <div class="view-media fixed">
+                <img id="viewImage" alt="Foto item">
+            </div>
+      </div>
+
+      <div class="view-media legacy" style="display:none">
+            <img id="viewImage" alt="Foto item">
+      </div>
+
+      <div class="view-grid">
+            <div class="chiplist" id="viewChips"></div>
+            <div class="full" style="border-top: -20px;"><span class="label">Descrizione</span><span id="viewDescription"></span></div>
+            <div class="full"><span class="label">Link item</span>
+                <div id="viewInfoLinks" class="link-list"></div>
+            </div>
+            <div style="display: flex; flex-direction: row;" class="full">
+                <div style="width: 30%;"><span class="label" style="border-right: 10px;">Prezzo acquisto</span><span id="viewPurchase"></span></div>
+                <div style="width: 30%;"><span class="label" style="border-right: 10px;">Data acquisto</span><span id="viewPurchaseDate"></span></div>
+                <div><span class="label" style="border-left: 10px;">Giorni in collezione</span><span id="viewDaysInCollection"></span></div>
+            </div>
+            <div style="display: flex; flex-direction: row;" class="full">
+                <div style="width: 30%;"><span class="label">Prezzo vendita</span><span id="viewSale"></span></div>
+                <div style="width: 30%;"><span class="label">Data vendita</span><span id="viewSaleDate"></span></div>
+            </div>
+            <div class="full"><span class="label">Link marketplace</span>
+                <div id="viewMarketplaceLinks" class="link-list"></div>
+            </div>
+            <div class="full">
+                <span class="label">Tag</span>
+                <div class="" id="viewTagList"></div>
+            </div>
+      </div>
+
+      <!-- Sezione stime mercato: temporaneamente nascosta -->
+      <div class="market-estimate" style="display: none;">
+          <div class="est-header">
+              <div style="vertical-align: auto; width: 40%;">
+                  <h3>Stima prezzo a mercato</h3>
+                  <img id="ebaylogo" src="/static/icons/ebay_logo.svg" class="logo-api" alt="eBay logo">
+              </div>
+              <div style="vertical-align: auto; width: 60%;">
+                  <p>Criterio Stima: Venduti di recente</p>
+                  <small id="estSource"></small>
+                  <br>
+                  <small id="estQuery"></small>
+              </div>
+          </div>
+          <div id="estContent" class="est-content">
+            <em>Nessuna stima disponibile.</em>
+          </div>
+      </div>
+    
+      <div class="market-estimate" style="display: none;">
+          <div class="est-header">
+            <div style="vertical-align: auto; width: 40%;">
+              <h3>Stima prezzo a mercato</h3>
+              <img id="2mLogo" src="" class="logo-api" alt="API logo">
+            </div>
+            <div style="vertical-align: auto; width: 60%;">
+              <p style="border-bottom: 5px;">Criterio Stima: Prezzi Correnti</p>
+              <small id="2mSource"></small>
+              <br>
+              <small id="2mQuery"></small>
+            </div>
+          </div>
+          <div id="2mContent" class="est-content">
+            <em>Nessuna stima disponibile.</em>
+          </div>
+      </div>
+    </div>
+  </div>
+</div>
