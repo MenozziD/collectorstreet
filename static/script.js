@@ -683,9 +683,9 @@ function openModal(item = null) {
         itemLanguage.value = item.language || '';
         itemCategory.value = item.category || '';
         if (item && item.market_params) {
-            renderMarketParamsFields(item.market_params);
+            renderMarketParamsFields();
         } else {
-            renderMarketParamsFields({});
+            renderMarketParamsFields();
         }
         purchasePrice.value = item.purchase_price !== null && item.purchase_price !== undefined ? item.purchase_price : '';
         purchaseDate.value = item.purchase_date || '';
@@ -712,7 +712,7 @@ function openModal(item = null) {
     modal.classList.remove('hidden');
     
     document.getElementById('itemCategory')?.addEventListener('change', () => {
-        renderMarketParamsFields(collectMarketParams());
+        renderMarketParamsFields();
     });
 }
 
@@ -1232,79 +1232,6 @@ function renderTagPills(item){
   if (legacy) legacy.style.display = tags.length ? 'none' : '';
 }
 
-// Schema dei parametri per categoria
-const MARKET_HINTS_SCHEMA = {
-  'tradingcard': [
-    {key:'game', label:'Gioco', placeholder:'es. Pokémon / MTG', tip:'Gioco TCG (pokemon, mtg, yugioh, ...)' },
-    {key:'set_name', label:'Set', placeholder:'es. Base Set', tip:'Nome set/espansione' },
-    {key:'number', label:'Numero', placeholder:'es. 4/102', tip:'Numero carta' },
-    {key:'language', label:'Lingua', placeholder:'es. ITA/ENG/JP', tip:'Lingua' },
-    {key:'printing', label:'Finitura', placeholder:'Normal / Foil', tip:'Normal / Foil / 1st Edition / Unlimited' },
-    {key:'tcgplayer_id', label:'TCGplayer ID', placeholder:'es. 123456', tip:'ID diretto per lookup preciso' },
-    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
-  ],
-  'videogame': [
-    {key:'platform', label:'Piattaforma', placeholder:'es. PS2, SNES', tip:'Piattaforma/console' },
-    {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' },
-    {key:'edition', label:'Edizione', placeholder:'Standard / Limited', tip:'Edizione o variant' },
-    {key:'pricecharting_id', label:'PriceCharting ID', placeholder:'es. 12345', tip:'ID diretto se noto' },
-    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
-  ],
-  'console': [
-    {key:'platform', label:'Piattaforma', placeholder:'es. Nintendo Switch', tip:'Console piattaforma' },
-    {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' },
-    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
-  ],
-  'sneakers': [
-    {key:'brand', label:'Brand', placeholder:'Nike / Adidas', tip:'Marca' },
-    {key:'model', label:'Modello', placeholder:'es. Dunk Low', tip:'Modello' },
-    {key:'colorway', label:'Colorway', placeholder:'es. Panda', tip:'Colorway' },
-    {key:'sku', label:'SKU', placeholder:'es. DD1391-100', tip:'Codice prodotto' },
-    {key:'size', label:'Taglia', placeholder:'US 9 / EU 42.5', tip:'Taglia' },
-    {key:'stockx_url_key', label:'StockX URL Key', placeholder:'es. nike-dunk-low-retro-white-black', tip:'Slug univoco' },
-    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
-  ],
-  'vinyl': [
-    {key:'artist', label:'Artista', placeholder:'es. Pink Floyd', tip:'Artista' },
-    {key:'album', label:'Album', placeholder:'es. The Dark Side...', tip:'Titolo' },
-    {key:'year', label:'Anno', placeholder:'es. 1973', tip:'Anno uscita' },
-    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 1234567', tip:'ID release Discogs' },
-    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
-  ],
-  'cd': [
-    {key:'artist', label:'Artista', placeholder:'es. Daft Punk', tip:'Artista' },
-    {key:'album', label:'Album', placeholder:'es. Discovery', tip:'Titolo' },
-    {key:'year', label:'Anno', placeholder:'es. 2001', tip:'Anno uscita' },
-    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 7654321', tip:'ID release Discogs' },
-    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
-  ],
-  'lego': [
-    {key:'set_number', label:'Set Number', placeholder:'es. 75336', tip:'Codice set LEGO' },
-    {key:'theme', label:'Tema', placeholder:'es. Star Wars', tip:'Tema' },
-    {key:'year', label:'Anno', placeholder:'es. 2022', tip:'Anno uscita' },
-    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
-  ],
-  'default': [
-    {key:'brand', label:'Brand', placeholder:'', tip:'Marca' },
-    {key:'model', label:'Modello', placeholder:'', tip:'Modello' },
-    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
-  ]
-};
-
-
-
-
-function collectMarketParams(){
-  const catKey = normalizeCategory(document.getElementById('itemCategory').value);
-  const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
-  const obj = {};
-  schema.forEach(f => {
-    const el = document.getElementById('mp_' + f.key);
-    if (el && el.value && el.value.trim() !== '') obj[f.key] = el.value.trim();
-  });
-  return obj;
-}
-
 function parseMarketParams(mp){
   try {
     if (!mp) return {};
@@ -1313,24 +1240,6 @@ function parseMarketParams(mp){
   } catch(e){}
   return {};
 }
-
-const CATEGORY_ALIASES = {
-  'snickers': 'sneakers',
-  'shoes': 'sneakers',
-  'vynil': 'vinyl',
-  'videogames': 'videogame',
-  'tradingcards': 'tradingcard'
-};
-
-function normalizeCategory(cat){
-  const k = (cat || '').toLowerCase().trim();
-  if (MARKET_HINTS_SCHEMA[k]) return k;
-  if (CATEGORY_ALIASES[k] && MARKET_HINTS_SCHEMA[CATEGORY_ALIASES[k]]) {
-    return CATEGORY_ALIASES[k];
-  }
-  return 'default';
-}
-
 
 // ===== Global Catalog: Info Links =====
 function getCurrentGlobalId(){
@@ -1359,46 +1268,6 @@ function renderInfoLinks(links){
   });
 }
 
-/* let currentInfoLinks = [];
-
-async function loadInfoLinksIfAny(){
-  const gid = getCurrentGlobalId();
-  const sect = document.getElementById('infoLinksSection');
-  if (!sect) return;
-  if (!gid){
-    sect.style.display = 'none';
-    currentInfoLinks = [];
-    renderInfoLinks(currentInfoLinks);
-    return;
-  }
-  sect.style.display = '';
-  try{
-    const r = await fetch(`/api/global-catalog/${gid}/info-links`);
-    const jsn = await r.json();
-    currentInfoLinks = jsn.links || [];
-  }catch(e){
-    currentInfoLinks = [];
-  }
-  renderInfoLinks(currentInfoLinks);
-} */
-
-/* document.addEventListener('click', (e)=>{
-  if (e.target && e.target.id === 'btnAddInfoLink'){
-    e.preventDefault();
-    const inp = document.getElementById('infoLinkInput');
-    if (!inp) return;
-    const url = (inp.value||'').trim();
-    if (!url) return;
-    if (!/^https?:\/\//i.test(url)){ alert('Inserisci un URL che inizi con http:// o https://'); return; }
-    currentInfoLinks.push(url);
-    inp.value='';
-    renderInfoLinks(currentInfoLinks);
-  }
-  if (e.target && e.target.id === 'btnSaveInfoLinks'){
-    e.preventDefault();
-    saveInfoLinks();
-  }
-}); */
 
 async function saveInfoLinks(){
   const gid = getCurrentGlobalId();
