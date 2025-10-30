@@ -41,9 +41,9 @@ class db():
             ('cardmarket_link', 'TEXT'),
             ('ebay_link', 'TEXT'),
             ('facebook_link', 'TEXT'),
-            ('ref_currency', 'TEXT')
-        
-            ,('theme', 'TEXT')]:
+            ('ref_currency', 'TEXT'),
+            ('item_view_mode', 'TEXT'),
+            ('theme', 'TEXT')]:
             try:
                 cur.execute(f"ALTER TABLE users ADD COLUMN {column} {col_type}")
             except sqlite3.OperationalError:

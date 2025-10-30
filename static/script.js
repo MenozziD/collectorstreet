@@ -1,6 +1,8 @@
 // import the variables and function from module.js
 import { renderMarketParamsFields, renderLinks } from './render.js';
 
+
+let USER_ITEM_VIEW_MODE = 'standard';
 // script.js - gestisce login e interazione con l'applicazione
 // Global variable to store the current user's reference currency
 let USER_REF_CURRENCY = null;
@@ -82,6 +84,7 @@ async function fetchUserInfo() {
         if (res.ok) {
             const data = await res.json();
             USER_REF_CURRENCY = data.ref_currency || null;
+            USER_ITEM_VIEW_MODE = (data.item_view_mode || 'standard').toLowerCase();
             updateRefCurrencyLabel();
         }
     } catch (err) {
@@ -470,27 +473,33 @@ function renderItems(items) {
         titleWrapper.appendChild(nameSpan);
 
         card.appendChild(titleWrapper);
-        if (item.description) {
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+if (item.description) {
             const desc = document.createElement('p');
             desc.id = "desc-field";
             desc.textContent = item.description;
             card.appendChild(desc);
+        }
         }
         if (item.category) {
             const cat = document.createElement('p');
             cat.innerHTML = `<strong>Categoria:</strong> ${item.category}`;
             card.appendChild(cat);
         }
-        if (item.purchase_price !== null && item.purchase_price !== undefined) {
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+if (item.purchase_price !== null && item.purchase_price !== undefined) {
             const pp = document.createElement('p');
             const currency = item.currency || '';
             pp.innerHTML = `<strong>Prezzo Acquisto:</strong> ${item.purchase_price} ${currency}`;
             card.appendChild(pp);
+        }
             // Mostra anche il prezzo in valuta di riferimento se disponibile e se l'utente ha impostato una valuta di riferimento
-            if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined && USER_REF_CURRENCY) {
+            if (USER_ITEM_VIEW_MODE !== 'compact') {
+if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined && USER_REF_CURRENCY) {
                 const ppRef = document.createElement('p');
                 ppRef.innerHTML = `<strong>Prezzo Acquisto (Ref):</strong> ${item.purchase_price_curr_ref.toFixed(2)} ${USER_REF_CURRENCY}`;
                 card.appendChild(ppRef);
+        }
             }
         }
         if (item.purchase_date) {
@@ -498,16 +507,20 @@ function renderItems(items) {
             pd.innerHTML = `<strong>Data Acquisto:</strong> ${item.purchase_date}`;
             card.appendChild(pd);
         }
-        if (item.sale_price !== null && item.sale_price !== undefined) {
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+if (item.sale_price !== null && item.sale_price !== undefined) {
             const sp = document.createElement('p');
             const currency = item.currency || '';
             sp.innerHTML = `<strong>Prezzo Vendita:</strong> ${item.sale_price} ${currency}`;
             card.appendChild(sp);
         }
-        if (item.sale_date) {
+        }
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+if (item.sale_date) {
             const sd = document.createElement('p');
             sd.innerHTML = `<strong>Data Vendita:</strong> ${item.sale_date}`;
             card.appendChild(sd);
+        }
         }
         if (item.quantity !== null && item.quantity !== undefined) {
             const qty = document.createElement('p');
@@ -524,11 +537,13 @@ function renderItems(items) {
             tic.innerHTML = `<strong>Giorni in collezione:</strong> ${item.time_in_collection}`;
             card.appendChild(tic);
         }
-        if (item.roi !== null && item.roi !== undefined) {
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+if (item.roi !== null && item.roi !== undefined) {
             const roi = document.createElement('p');
             const perc = (item.roi * 100).toFixed(2);
             roi.innerHTML = `<strong>ROI:</strong> ${perc}%`;
             card.appendChild(roi);
+        }
         }
         /* Valore stimato e range di mercato
         if (item.fair_value !== null && item.fair_value !== undefined) {
