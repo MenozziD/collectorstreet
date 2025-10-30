@@ -1,3 +1,39 @@
+function renderMarketParamsFields(existing){
+    const wrap = document.getElementById('marketParamsFields');
+    if (!wrap) return;
+
+    const catRaw = document.getElementById('itemCategory')?.value || '';
+    const catKey = normalizeCategory(catRaw);
+    const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
+
+    // Valori esistenti (object) se passati o presi dai campi attuali
+    const existingObj = existing ? parseMarketParams(existing) : collectMarketParams();
+
+    wrap.innerHTML = '';
+    schema.forEach(f => {
+        const div = document.createElement('div');
+        //div.style = "width: 40%; padding-right: 0%; margin-right: 0%; border-right:0%;";
+        //div.className = 'field';
+
+        const inputId = 'mp_' + f.key;
+        const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
+
+        const label = document.createElement('small');
+        label.className = 'hint-field'
+        label.htmlFor = inputId;
+        label.title = f.tip || '';
+        label.textContent = f.label;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = inputId;
+        input.placeholder = f.placeholder || '';
+        input.value = val || '';
+
+        div.append(label, input);
+        wrap.appendChild(div);    
+    });
+}
 
 
 function renderLinks(list, containerId){
@@ -26,4 +62,4 @@ function renderLinks(list, containerId){
 }
 
 // exporting variables and function
-export {renderLinks};
+export {renderMarketParamsFields, renderLinks};
