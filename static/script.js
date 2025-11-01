@@ -3,6 +3,13 @@ import { renderMarketParamsFields, renderLinks } from './render.js';
 
 
 let USER_ITEM_VIEW_MODE = 'standard';
+// NEW: aggiungi subito dopo
+(function applyViewModeClass(){
+  const root = document.documentElement;
+  root.classList.toggle('compact-mode', USER_ITEM_VIEW_MODE === 'compact');
+})();
+
+
 // script.js - gestisce login e interazione con l'applicazione
 // Global variable to store the current user's reference currency
 let USER_REF_CURRENCY = null;
@@ -538,12 +545,12 @@ if (item.sale_date) {
             card.appendChild(tic);
         }
         if (USER_ITEM_VIEW_MODE !== 'compact') {
-if (item.roi !== null && item.roi !== undefined) {
-            const roi = document.createElement('p');
-            const perc = (item.roi * 100).toFixed(2);
-            roi.innerHTML = `<strong>ROI:</strong> ${perc}%`;
-            card.appendChild(roi);
-        }
+            if (item.roi !== null && item.roi !== undefined) {
+                const roi = document.createElement('p');
+                const perc = (item.roi * 100).toFixed(2);
+                roi.innerHTML = `<strong>ROI:</strong> ${perc}%`;
+                card.appendChild(roi);
+            }
         }
         /* Valore stimato e range di mercato
         if (item.fair_value !== null && item.fair_value !== undefined) {
@@ -571,6 +578,8 @@ if (item.roi !== null && item.roi !== undefined) {
             const tagsDiv = document.createElement('div');
             tagsDiv.className = 'tags';
             const tags = item.tags.split('#').map(t => t.trim()).filter(Boolean);
+            // In modalità compatta, limita ai primi 3
+            if (USER_ITEM_VIEW_MODE === 'compact') tags = tags.slice(0, 3);
             tags.forEach(tag => {
                 const span = document.createElement('span');
                 span.className = 'tag';
