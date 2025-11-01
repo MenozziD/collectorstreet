@@ -577,7 +577,7 @@ if (item.sale_date) {
         if (item.tags) {
             const tagsDiv = document.createElement('div');
             tagsDiv.className = 'tags';
-            const tags = item.tags.split('#').map(t => t.trim()).filter(Boolean);
+            let tags = item.tags.split('#').map(t => t.trim()).filter(Boolean);
             // In modalità compatta, limita ai primi 3
             if (USER_ITEM_VIEW_MODE === 'compact') tags = tags.slice(0, 3);
             tags.forEach(tag => {
