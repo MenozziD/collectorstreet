@@ -1166,16 +1166,6 @@ def create_app(db_path: str = "database.db") -> Flask:
             else:
                 stats = {'count': 0, 'currency': item.get('currency') or 'EUR'}
 
-            cur.execute("""
-                INSERT INTO ebay_price_history (item_id, date, avg, median, min, max, count, currency, keywords, site_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(item_id, date) DO UPDATE SET
-                    avg=excluded.avg, median=excluded.median, min=excluded.min, max=excluded.max,
-                    count=excluded.count, currency=excluded.currency, keywords=excluded.keywords, site_id=excluded.site_id
-            """, (item_id, today, stats.get('avg'), stats.get('median'), stats.get('min'), stats.get('max'),
-                    stats.get('count',0), stats.get('currency'), keywords, str(site_id)))
-            conn.commit()
-
             result['stats'] = stats
             result['samples'] = samples
             conn.close()
@@ -1186,15 +1176,6 @@ def create_app(db_path: str = "database.db") -> Flask:
             est = base_val * 1.1
             today = _dt.date.today().isoformat()
             stats = {'count': 0, 'avg': round(est,2), 'median': round(est,2), 'min': round(base_val*0.9,2), 'max': round(base_val*1.3,2), 'currency': item.get('currency') or 'EUR', 'stub': True}
-            cur.execute("""
-                INSERT INTO ebay_price_history (item_id, date, avg, median, min, max, count, currency, keywords, site_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(item_id, date) DO UPDATE SET
-                    avg=excluded.avg, median=excluded.median, min=excluded.min, max=excluded.max,
-                    count=excluded.count, currency=excluded.currency, keywords=excluded.keywords, site_id=excluded.site_id
-            """, (item_id, today, stats.get('avg'), stats.get('median'), stats.get('min'), stats.get('max'),
-                    stats.get('count',0), stats.get('currency'), keywords, str(site_id)))
-            conn.commit(); conn.close()
             result['stats'] = stats
             return jsonify(result), 200
 
