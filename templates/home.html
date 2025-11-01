@@ -94,14 +94,7 @@
         </div>
     </section>
     <!-- Script per gestione logout e dashboard -->
-    <script>
-        // Handler del bottone di logout: chiama l'endpoint e poi reindirizza alla login
-        document.getElementById('logoutBtn').addEventListener('click', async () => {
-            await fetch('/logout', { method: 'POST' });
-            window.location.href = '/';
-        });
-    </script>
     <!-- Script dedicato alla pagina Home -->
-    <script type="module" src="{{ url_for('static', filename='script.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='home.js') }}"></script>
 </body>
 </html>

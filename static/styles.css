@@ -942,4 +942,32 @@ body.theme-sakura .chip, body.theme-sakura .tag-pill { background:#fff; border-c
   #marketParamsFields.mp-grid{ grid-template-columns: 1fr; }
 }
 
+/* --- Compact Mode Tweaks --- */
+.compact-mode .item-card {
+  padding: 10px;
+  border-radius: 10px;
+}
 
+.compact-mode .item-card h3 {
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+/* testi secondari leggermente più piccoli */
+.compact-mode .item-card .meta,
+.compact-mode .item-card .badge,
+.compact-mode .item-card small {
+  font-size: 0.85rem;
+}
+
+/* righe dati più serrate */
+.compact-mode .item-card .field-row {
+  margin: 2px 0;
+}
+
+/* (se vuoi compattare i tag visualmente in pill) */
+.compact-mode .item-card .tag {
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}

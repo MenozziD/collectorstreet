@@ -96,6 +96,11 @@
                         <option value="sakura" {% if user.theme == 'sakura' %}selected{% endif %}>Sakura (rosa ciliegio)</option>
                     </select>
                     <small>Il tema viene salvato nel profilo. Cambia e premi "Salva modifiche".</small>
+                    <label for="item_view_mode">Visualizzazione Item</label>
+                    <select id="item_view_mode" name="item_view_mode" title="Standard: mostra tutti i campi. \n Compatto: mostra solo Nome, Categoria, Data Acquisto, Quantità, Condizione, Giorni in collezione e Tag.">
+                        <option value="standard" {% if user and (user.item_view_mode or user['item_view_mode'] if user is mapping else None) != 'compact' %}selected{% endif %}>Standard</option>
+                        <option value="compact"  {% if user and (user.item_view_mode or user['item_view_mode'] if user is mapping else None) == 'compact' %}selected{% endif %}>Compatto</option>
+                    </select>
                     <label for="profile_image">Immagine profilo</label>
                     <input type="file" name="profile_image" id="profile_image" accept="image/*">
                     <label for="vinted_link">Link Vinted</label>
@@ -105,7 +110,7 @@
                     <label for="ebay_link">Link eBay</label>
                     <input type="url" name="ebay_link" id="ebay_link" value="{{ user.ebay_link or '' }}">
                     <label for="facebook_link">Link Facebook Marketplace</label>
-                    <input type="url" name="facebook_link" id="facebook_link" value="{{ user.facebook_link or '' }}">
+                    <input type="url" name="facebook_link" id="facebook_link" value="{{ user.facebook_link or '' }}">                    
                     <button type="submit">Salva modifiche</button>
                 </form>
             </div>

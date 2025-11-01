@@ -518,6 +518,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         if request.content_type and request.content_type.startswith('multipart/form-data'):
             # Update via form (potentially with image)
             form = request.form
+            item_view_mode = form.get('item_view_mode')
             files = request.files
             fields = []
             values = []
@@ -697,7 +698,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             return jsonify({'error': 'Unauthorized'}), 401
         conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
-        cur.execute("SELECT id, username, nickname, ref_currency, theme FROM users WHERE id = ?", (user_id,))
+        cur.execute("SELECT id, username, nickname, ref_currency, theme, item_view_mode FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         conn.close()
         if user:
@@ -1015,6 +1016,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         cur = conn.cursor()
         if request.method == 'POST':
             form = request.form
+            item_view_mode = form.get('item_view_mode')
             files = request.files
             nickname = form.get('nickname')
             ref_currency = form.get('ref_currency')
@@ -1047,6 +1049,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             if facebook_link is not None:
                 fields.append('facebook_link = ?')
                 values.append(facebook_link)
+            if item_view_mode is not None:
+                fields.append('item_view_mode = ?')
+                values.append(item_view_mode)                
             # Handle profile image upload
             if profile_image and profile_image.filename:
                 ext = os.path.splitext(profile_image.filename)[1].lower()
