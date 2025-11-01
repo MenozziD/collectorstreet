@@ -481,12 +481,12 @@ function renderItems(items) {
 
         card.appendChild(titleWrapper);
         if (USER_ITEM_VIEW_MODE !== 'compact') {
-if (item.description) {
-            const desc = document.createElement('p');
-            desc.id = "desc-field";
-            desc.textContent = item.description;
-            card.appendChild(desc);
-        }
+            if (item.description) {
+                const desc = document.createElement('p');
+                desc.id = "desc-field";
+                desc.textContent = item.description;
+                card.appendChild(desc);
+            }
         }
         if (item.category) {
             const cat = document.createElement('p');
@@ -494,19 +494,19 @@ if (item.description) {
             card.appendChild(cat);
         }
         if (USER_ITEM_VIEW_MODE !== 'compact') {
-if (item.purchase_price !== null && item.purchase_price !== undefined) {
-            const pp = document.createElement('p');
-            const currency = item.currency || '';
-            pp.innerHTML = `<strong>Prezzo Acquisto:</strong> ${item.purchase_price} ${currency}`;
-            card.appendChild(pp);
-        }
+            if (item.purchase_price !== null && item.purchase_price !== undefined) {
+                const pp = document.createElement('p');
+                const currency = item.currency || '';
+                pp.innerHTML = `<strong>Prezzo Acquisto:</strong> ${item.purchase_price} ${currency}`;
+                card.appendChild(pp);
+            }
             // Mostra anche il prezzo in valuta di riferimento se disponibile e se l'utente ha impostato una valuta di riferimento
             if (USER_ITEM_VIEW_MODE !== 'compact') {
-if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined && USER_REF_CURRENCY) {
-                const ppRef = document.createElement('p');
-                ppRef.innerHTML = `<strong>Prezzo Acquisto (Ref):</strong> ${item.purchase_price_curr_ref.toFixed(2)} ${USER_REF_CURRENCY}`;
-                card.appendChild(ppRef);
-        }
+                if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined && USER_REF_CURRENCY) {
+                    const ppRef = document.createElement('p');
+                    ppRef.innerHTML = `<strong>Prezzo Acquisto (Ref):</strong> ${item.purchase_price_curr_ref.toFixed(2)} ${USER_REF_CURRENCY}`;
+                    card.appendChild(ppRef);
+                }
             }
         }
         if (item.purchase_date) {
@@ -515,19 +515,19 @@ if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== un
             card.appendChild(pd);
         }
         if (USER_ITEM_VIEW_MODE !== 'compact') {
-if (item.sale_price !== null && item.sale_price !== undefined) {
-            const sp = document.createElement('p');
-            const currency = item.currency || '';
-            sp.innerHTML = `<strong>Prezzo Vendita:</strong> ${item.sale_price} ${currency}`;
-            card.appendChild(sp);
-        }
+            if (item.sale_price !== null && item.sale_price !== undefined) {
+                const sp = document.createElement('p');
+                const currency = item.currency || '';
+                sp.innerHTML = `<strong>Prezzo Vendita:</strong> ${item.sale_price} ${currency}`;
+                card.appendChild(sp);
+            }
         }
         if (USER_ITEM_VIEW_MODE !== 'compact') {
-if (item.sale_date) {
-            const sd = document.createElement('p');
-            sd.innerHTML = `<strong>Data Vendita:</strong> ${item.sale_date}`;
-            card.appendChild(sd);
-        }
+            if (item.sale_date) {
+                const sd = document.createElement('p');
+                sd.innerHTML = `<strong>Data Vendita:</strong> ${item.sale_date}`;
+                card.appendChild(sd);
+            }
         }
         if (item.quantity !== null && item.quantity !== undefined) {
             const qty = document.createElement('p');

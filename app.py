@@ -368,8 +368,10 @@ def create_app(db_path: str = "database.db") -> Flask:
             if item['purchase_date']:
                 try:
                     purchase_date = datetime.strptime(item['purchase_date'], '%Y-%m-%d').date()
-                    today = date.today()
-                    delta = today - purchase_date
+                    if item['sale_date']:
+                        delta = datetime.strptime(item['sale_date'], '%Y-%m-%d').date() - purchase_date
+                    else:
+                        delta = date.today() - purchase_date 
                     time_in_collection = delta.days
                 except ValueError:
                     time_in_collection = None
