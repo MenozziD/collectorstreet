@@ -1,74 +1,6 @@
 // home.js - Gestisce la visualizzazione della dashboard Home
 
 document.addEventListener('DOMContentLoaded', () => {
-    /**
-     * Recupera le statistiche dal server e aggiorna grafici e indicatori.
-     */
-    async function fetchStats() {
-        try {
-            const res = await fetch('/api/profile/stats');
-            if (!res.ok) return;
-            const stats = await res.json();
-            updateStatsCard(stats);
-        } catch (err) {
-            console.error('Errore nel recupero delle statistiche', err);
-        }
-    }
-
-    /**
-     * Aggiorna i grafici e gli indicatori della card statistiche.
-     * Calcola la larghezza relativa delle barre rispetto al valore massimo.
-     * @param {Object} stats Oggetto con totale speso, venduto, roi e valuta
-     */
-    function updateStatsCard(stats) {
-        // Usa la spesa complessiva per confrontare con il totale venduto.
-        const totalSpent = stats.total_spent_all || 0;
-        const totalSold = stats.total_sold || 0;
-        const maxVal = Math.max(totalSpent, totalSold, 1);
-        const spentBar = document.querySelector('.bar.spent');
-        const soldBar = document.querySelector('.bar.sold');
-        if (spentBar && soldBar) {
-            const spentWidth = (totalSpent / maxVal) * 100;
-            const soldWidth = (totalSold / maxVal) * 100;
-            spentBar.style.width = spentWidth + '%';
-            soldBar.style.width = soldWidth + '%';
-            spentBar.setAttribute('title', `${totalSpent.toFixed(2)} ${stats.currency || ''}`);
-            soldBar.setAttribute('title', `${totalSold.toFixed(2)} ${stats.currency || ''}`);
-        }
-        // Aggiorna i valori numerici
-        const spentValEl = document.getElementById('totalSpentVal');
-        const soldValEl = document.getElementById('totalSoldVal');
-        if (spentValEl) {
-            spentValEl.textContent = stats.currency ? `${(stats.total_spent_all || 0).toFixed(2)} ${stats.currency}` : '-';
-        }
-        if (soldValEl) {
-            soldValEl.textContent = stats.currency ? `${(stats.total_sold || 0).toFixed(2)} ${stats.currency}` : '-';
-        }
-        // Aggiorna ROI
-        const roiSpan = document.getElementById('roiPercentage');
-        if (roiSpan) {
-            if (stats.currency && stats.roi !== null && stats.roi !== undefined) {
-                const roiPercent = stats.roi * 100;
-                roiSpan.textContent = roiPercent.toFixed(2) + '%';
-                roiSpan.style.color = roiPercent >= 0 ? '#28a745' : '#d9534f';
-            } else {
-                roiSpan.textContent = '-';
-                roiSpan.style.color = '';
-            }
-        }
-
-        // Aggiorna card informative: numero oggetti e giorni di collezione
-        const infoItemsCard = document.getElementById('infoItemsCard');
-        if (infoItemsCard) {
-            const p = infoItemsCard.querySelector('p');
-            p.textContent = stats.item_count !== null && stats.item_count !== undefined ? stats.item_count : '-';
-        }
-        const infoPeriodCard = document.getElementById('infoPeriodCard');
-        if (infoPeriodCard) {
-            const p = infoPeriodCard.querySelector('p');
-            p.textContent = stats.days_in_collection !== null && stats.days_in_collection !== undefined ? stats.days_in_collection : '-';
-        }
-    }
 
     /**
      * Recupera gli ultimi oggetti dell'utente per popolare le card di attività personali.
@@ -210,89 +142,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBtn.addEventListener('click', fetchStats);
     }
 
-    // ===== Dashboard =====
-    async function initDashboard()
-    {
-        try{
-            const s = await fetch('/api/dashboard/summary'); 
-            const summary = await s.json();
-            if (!summary.error){
-            setKPI('kpiSpent', summary.tot_spent);
-            setKPI('kpiSold', summary.tot_sold);
-            setKPI('kpiProfit', summary.profit_realized);
-            setKPI('kpiInCollection', summary.in_collection);
-            setKPI('kpiForSale', summary.for_sale);
-            setKPI('kpiAvgDays', summary.avg_days_in_collection);
-            }
-        }catch(e){ console.warn('summary fail', e); }
-        
-        try{
-            const r = await fetch('/api/dashboard/trend');
-            const data = await r.json();
-            if (data && Array.isArray(data.points)){
-            renderTrendChart(data.points);
-            }
-        }catch(e){ console.warn('trend fail', e); }
-        
-    }
-
-    function setKPI(id, val)
-    {
-        const el = document.getElementById(id);
-        if (!el) return;
-        if (val === null || val === undefined) { el.textContent = '—'; return; }
-        if (typeof val === 'number'){
-            if (id === 'kpiSpent' || id === 'kpiSold' || id === 'kpiProfit'){
-            el.textContent = formatMoney(val);
-            } else {
-            el.textContent = String(Math.round(val));
-            }
-        } else {
-            el.textContent = String(val);
-        }
-    }
-
-    function formatMoney(v)
-    { 
-        try { return (window.USER_REF_CURRENCY || 'EUR') + ' ' + Number(v).toFixed(2); }
-        catch(e){ return String(v); }
-    }
-
-    let trendChartInstance = null;
-    
-    function renderTrendChart(points)
-    {
-        const labels = points.map(p => p.month);
-        const spent = points.map(p => p.spent);
-        const sold  = points.map(p => p.sold);
-
-        const ctx = document.getElementById('trendChart').getContext('2d');
-        if (trendChartInstance){ trendChartInstance.destroy(); }
-        trendChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-            labels,
-            datasets: [
-                { label: 'Speso',  data: spent, borderColor: '#9aa5b1', backgroundColor: 'rgba(154,165,177,0.15)', tension: 0.25, fill: true },
-                { label: 'Venduto',data: sold,  borderColor: '#4f8cff', backgroundColor: 'rgba(79,140,255,0.12)', tension: 0.25, fill: true }
-            ]
-            },
-            options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            scales: {
-                y: { beginAtZero: true, ticks: { callback: (v)=> formatMoney(v) } },
-                x: { ticks: { maxRotation: 0, autoSkip: true } }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: (ctx)=> `${ctx.dataset.label}: ${formatMoney(ctx.parsed.y)}` } }
-            },
-            elements: { point: { radius: 2 } }
-            }
-        });
-    }
-
     // ===== Platform Overview =====
     async function initPlatformOverview(){
         try{
@@ -327,12 +176,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Inizializza la pagina caricando statistiche e attività
-    fetchStats();
     fetchPersonalActivity();
     fetchGlobalActivity();
 
-    // Dashboard
-    try { initDashboard(); } catch(e){}
     try { initPlatformOverview(); } catch(e){}
 
     // Recupera notizie rilevanti in base ai tag degli oggetti della collezione

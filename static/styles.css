@@ -1026,3 +1026,31 @@ body.theme-sakura .chip, body.theme-sakura .tag-pill { background:#fff; border-c
   .platform-kpis { grid-template-columns: 1fr; }
   #trendChart { height:220px; }
 }
+
+/* Tabs profilo */
+.profile-tabs{
+  display:flex;
+  gap:8px;
+  border-bottom:1px solid var(--border, rgba(0,0,0,.12));
+  margin:12px 0 4px;
+}
+.profile-tabs .tab-btn{
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  padding:8px 12px;
+  font-weight:600;
+  color:var(--muted, #6b7280);
+  border-bottom:2px solid transparent;
+}
+.profile-tabs .tab-btn:hover{ color:var(--fg, #111827); }
+.profile-tabs .tab-btn.active{
+  color:var(--fg, #111827);
+  border-color: var(--accent, #4f8cff);
+}
+.tab-panels{ padding-top:8px; }
+.tab-panel{ display:none; }
+.tab-panel.active{ display:block; }
+
+/* opzionale: armonizza le card dentro i tab */
+.profile-stats, .profile-edit{ background: var(--card-bg, #fff); border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:12px; }

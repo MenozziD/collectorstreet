@@ -1,4 +1,5 @@
 from app.db import db
 from app.helpers import hlp
 from app.globalcatalog import gc
-from app.home import dashboard, platform
+from app.home import platform
+from app.profile import dashboard, prf

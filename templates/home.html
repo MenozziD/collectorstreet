@@ -37,51 +37,6 @@
     </nav>
 
     <section class="home-container">
-        <h2>Benvenuto, {{ user.nickname or user.username }}</h2>
-        <!-- Card statistiche con grafici e indicatori -->
-        <div class="stats-card">
-            <h3>Statistiche collezione</h3>
-            <div class="stats-numbers">
-                <span><strong>Speso:</strong> <span id="totalSpentVal">-</span></span>
-            </div>
-            <div class="bar-chart">
-                <div class="bar spent" style="width:0%"></div>
-                <div class="bar sold" style="width:0%"></div>
-            </div>
-            <div class="stats-numbers">
-                <span><strong>Venduto:</strong> <span id="totalSoldVal">-</span></span>
-            </div>
-            <div class="roi-indicator"><strong>ROI:</strong> <span id="roiPercentage">-</span></div>
-            <button type="button" id="updateStatsBtn" class="update-stats-btn">Aggiorna statistiche</button>
-        </div>
-        <div class="dash-row">
-            <div class="dash-card kpis">
-            <div class="kpi"><div class="kpi-label">Totale Speso</div><div class="kpi-value" id="kpiSpent">—</div></div>
-            <div class="kpi"><div class="kpi-label">Totale Venduto</div><div class="kpi-value" id="kpiSold">—</div></div>
-            <div class="kpi"><div class="kpi-label">Profitto Realizzato</div><div class="kpi-value" id="kpiProfit">—</div></div>
-            <div class="kpi"><div class="kpi-label">In Collezione</div><div class="kpi-value" id="kpiInCollection">—</div></div>
-            <div class="kpi"><div class="kpi-label">In Vendita</div><div class="kpi-value" id="kpiForSale">—</div></div>
-            <div class="kpi"><div class="kpi-label">Giorni Medi in Collezione</div><div class="kpi-value" id="kpiAvgDays">—</div></div>
-            </div>
-        </div>
-        <div class="dash-row">
-            <div class="dash-card">
-            <div class="dash-card-header">
-                <h3>Trend Spesa vs Venduto</h3>
-                <div class="dash-legend"><span class="legend spent"></span> Speso <span class="legend sold"></span> Venduto</div>
-            </div>
-            <canvas id="trendChart" height="200px"></canvas>
-            </div>
-        </div>
-        <div class="dash-row">
-            <div class="dash-card subtle">
-            <div class="dash-card-header"><h3>Altri indicatori (placeholder)</h3></div>
-            <div class="muted">
-                Predisposta tabella <code>user_finance_daily</code> per future metriche (inventory_value, items_bought, items_sold, note).
-            </div>
-            </div>
-        </div>
-
         <!-- Platform Overview -->
         <div class="dash-card">
             <div class="dash-row">
