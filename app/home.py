@@ -30,13 +30,13 @@ class dashboard():
         cur = conn.cursor()
 
         # Totale Speso
-        cur.execute("SELECT COALESCE(SUM(purchase_price),0) FROM items WHERE user_id=? AND purchase_price IS NOT NULL", (uid,))
+        cur.execute("SELECT COALESCE(SUM(purchase_price_curr_ref),0) FROM items WHERE user_id=? AND purchase_price_curr_ref IS NOT NULL", (uid,))
         tot_spent = cur.fetchone()[0]
 
         cur.execute("SELECT COALESCE(SUM(sale_price),0) FROM items WHERE user_id=? AND sale_price IS NOT NULL", (uid,))
         tot_sold = cur.fetchone()[0]
 
-        cur.execute("SELECT COALESCE(SUM(sale_price - COALESCE(purchase_price,0)),0) FROM items WHERE user_id=? AND sale_price IS NOT NULL", (uid,))
+        cur.execute("SELECT COALESCE(SUM(sale_price - COALESCE(purchase_price_curr_ref,0)),0) FROM items WHERE user_id=? AND sale_price IS NOT NULL", (uid,))
         profit_realized = cur.fetchone()[0]
 
         cur.execute("SELECT COUNT(*) FROM items WHERE user_id=? AND (sale_date IS NULL OR sale_date='')", (uid,))
@@ -74,9 +74,9 @@ class dashboard():
         cur = conn.cursor()
 
         cur.execute("""
-            SELECT strftime('%Y-%m', purchase_date) AS ym, COALESCE(SUM(purchase_price),0)
+            SELECT strftime('%Y-%m', purchase_date) AS ym, COALESCE(SUM(purchase_price_curr_ref),0)
             FROM items
-            WHERE user_id=? AND purchase_price IS NOT NULL AND purchase_date IS NOT NULL AND purchase_date<>''
+            WHERE user_id=? AND purchase_price_curr_ref IS NOT NULL AND purchase_date IS NOT NULL AND purchase_date<>''
             GROUP BY ym ORDER BY ym
         """, (uid,))
         spent = {r[0]: r[1] for r in cur.fetchall()}
