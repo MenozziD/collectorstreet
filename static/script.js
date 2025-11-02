@@ -1,5 +1,14 @@
 // import the variables and function from module.js
-import { renderMarketParamsFields, renderLinks } from './render.js';
+import { renderMarketParamsFields, renderLinks, collectMarketParams } from './render.js';
+
+
+let USER_ITEM_VIEW_MODE = 'standard';
+// NEW: aggiungi subito dopo
+(function applyViewModeClass(){
+  const root = document.documentElement;
+  root.classList.toggle('compact-mode', USER_ITEM_VIEW_MODE === 'compact');
+})();
+
 
 // script.js - gestisce login e interazione con l'applicazione
 // Global variable to store the current user's reference currency
@@ -82,6 +91,7 @@ async function fetchUserInfo() {
         if (res.ok) {
             const data = await res.json();
             USER_REF_CURRENCY = data.ref_currency || null;
+            USER_ITEM_VIEW_MODE = (data.item_view_mode || 'standard').toLowerCase();
             updateRefCurrencyLabel();
         }
     } catch (err) {
@@ -253,7 +263,8 @@ function initApp() {
                 // Include prezzo in valuta di riferimento se presente
                 const refValJson = document.getElementById('purchasePriceRef').value;
                 payload.purchase_price_curr_ref = refValJson ? parseFloat(refValJson) : null;
-                const mp = collectMarketParams(); if (Object.keys(mp).length) payload.market_params = mp;
+                const mp = collectMarketParams();
+                if (Object.keys(mp).length) payload.market_params = mp;
                 res = await fetch('/api/items', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -304,22 +315,6 @@ function initApp() {
         renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
     }
     });
-
-    const _openModalOrig = window.openModal;
-    window.openModal = function(editItem = null){
-        if (typeof _openModalOrig === 'function') _openModalOrig.apply(this, arguments);
-
-        // inizializza stati
-        stateInfoLinks = Array.isArray(editItem?.info_links) ? [...editItem.info_links] : [];
-        stateMarketplaceLinks = Array.isArray(editItem?.marketplace_links) ? [...editItem.marketplace_links] : [];
-
-        renderLinks(stateInfoLinks, 'infoLinksItemList');
-        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
-
-        // pulisci input
-        const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
-        const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
-    };
 
 }
 
@@ -470,27 +465,33 @@ function renderItems(items) {
         titleWrapper.appendChild(nameSpan);
 
         card.appendChild(titleWrapper);
-        if (item.description) {
-            const desc = document.createElement('p');
-            desc.id = "desc-field";
-            desc.textContent = item.description;
-            card.appendChild(desc);
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+            if (item.description) {
+                const desc = document.createElement('p');
+                desc.id = "desc-field";
+                desc.textContent = item.description;
+                card.appendChild(desc);
+            }
         }
         if (item.category) {
             const cat = document.createElement('p');
             cat.innerHTML = `<strong>Categoria:</strong> ${item.category}`;
             card.appendChild(cat);
         }
-        if (item.purchase_price !== null && item.purchase_price !== undefined) {
-            const pp = document.createElement('p');
-            const currency = item.currency || '';
-            pp.innerHTML = `<strong>Prezzo Acquisto:</strong> ${item.purchase_price} ${currency}`;
-            card.appendChild(pp);
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+            if (item.purchase_price !== null && item.purchase_price !== undefined) {
+                const pp = document.createElement('p');
+                const currency = item.currency || '';
+                pp.innerHTML = `<strong>Prezzo Acquisto:</strong> ${item.purchase_price} ${currency}`;
+                card.appendChild(pp);
+            }
             // Mostra anche il prezzo in valuta di riferimento se disponibile e se l'utente ha impostato una valuta di riferimento
-            if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined && USER_REF_CURRENCY) {
-                const ppRef = document.createElement('p');
-                ppRef.innerHTML = `<strong>Prezzo Acquisto (Ref):</strong> ${item.purchase_price_curr_ref.toFixed(2)} ${USER_REF_CURRENCY}`;
-                card.appendChild(ppRef);
+            if (USER_ITEM_VIEW_MODE !== 'compact') {
+                if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined && USER_REF_CURRENCY) {
+                    const ppRef = document.createElement('p');
+                    ppRef.innerHTML = `<strong>Prezzo Acquisto (Ref):</strong> ${item.purchase_price_curr_ref.toFixed(2)} ${USER_REF_CURRENCY}`;
+                    card.appendChild(ppRef);
+                }
             }
         }
         if (item.purchase_date) {
@@ -498,16 +499,20 @@ function renderItems(items) {
             pd.innerHTML = `<strong>Data Acquisto:</strong> ${item.purchase_date}`;
             card.appendChild(pd);
         }
-        if (item.sale_price !== null && item.sale_price !== undefined) {
-            const sp = document.createElement('p');
-            const currency = item.currency || '';
-            sp.innerHTML = `<strong>Prezzo Vendita:</strong> ${item.sale_price} ${currency}`;
-            card.appendChild(sp);
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+            if (item.sale_price !== null && item.sale_price !== undefined) {
+                const sp = document.createElement('p');
+                const currency = item.currency || '';
+                sp.innerHTML = `<strong>Prezzo Vendita:</strong> ${item.sale_price} ${currency}`;
+                card.appendChild(sp);
+            }
         }
-        if (item.sale_date) {
-            const sd = document.createElement('p');
-            sd.innerHTML = `<strong>Data Vendita:</strong> ${item.sale_date}`;
-            card.appendChild(sd);
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+            if (item.sale_date) {
+                const sd = document.createElement('p');
+                sd.innerHTML = `<strong>Data Vendita:</strong> ${item.sale_date}`;
+                card.appendChild(sd);
+            }
         }
         if (item.quantity !== null && item.quantity !== undefined) {
             const qty = document.createElement('p');
@@ -524,11 +529,13 @@ function renderItems(items) {
             tic.innerHTML = `<strong>Giorni in collezione:</strong> ${item.time_in_collection}`;
             card.appendChild(tic);
         }
-        if (item.roi !== null && item.roi !== undefined) {
-            const roi = document.createElement('p');
-            const perc = (item.roi * 100).toFixed(2);
-            roi.innerHTML = `<strong>ROI:</strong> ${perc}%`;
-            card.appendChild(roi);
+        if (USER_ITEM_VIEW_MODE !== 'compact') {
+            if (item.roi !== null && item.roi !== undefined) {
+                const roi = document.createElement('p');
+                const perc = (item.roi * 100).toFixed(2);
+                roi.innerHTML = `<strong>ROI:</strong> ${perc}%`;
+                card.appendChild(roi);
+            }
         }
         /* Valore stimato e range di mercato
         if (item.fair_value !== null && item.fair_value !== undefined) {
@@ -555,7 +562,9 @@ function renderItems(items) {
         if (item.tags) {
             const tagsDiv = document.createElement('div');
             tagsDiv.className = 'tags';
-            const tags = item.tags.split('#').map(t => t.trim()).filter(Boolean);
+            let tags = item.tags.split('#').map(t => t.trim()).filter(Boolean);
+            // In modalità compatta, limita ai primi 3
+            if (USER_ITEM_VIEW_MODE === 'compact') tags = tags.slice(0, 3);
             tags.forEach(tag => {
                 const span = document.createElement('span');
                 span.className = 'tag';
@@ -686,6 +695,16 @@ function openModal(item = null) {
         if (purchasePriceRef) {
             purchasePriceRef.value = (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined) ? item.purchase_price_curr_ref : '';
         }
+        // Links Info e MarketPlace
+        // inizializza stati
+        stateInfoLinks = Array.isArray(item?.info_links) ? [...item.info_links] : [];
+        stateMarketplaceLinks = Array.isArray(item?.marketplace_links) ? [...item.marketplace_links] : [];
+        // Render Link già presenti
+        renderLinks(stateInfoLinks, 'infoLinksItemList');
+        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+        // pulisci input
+        const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
+        const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
     } else {
         modalTitle.textContent = 'Nuovo Item';
         toggleAdvancedBtn.style="display: None";
@@ -987,6 +1006,7 @@ function renderSecondaryMarketSection(item){
 }
 
 function openViewModal(item){
+    
     const m = document.getElementById('viewItemModal');
     const set = (id, val) => {
     const el = document.getElementById(id);
@@ -998,7 +1018,6 @@ function openViewModal(item){
         el.textContent = val || '—';
     }
     };
-
     document.getElementById('viewName').textContent = item.name || '(senza nome)';
     //document.getElementById('viewSubtitle').textContent = (item.category||'') + (item.language?(' · '+item.language):'');
     const img = document.getElementById('viewImage');
@@ -1011,12 +1030,13 @@ function openViewModal(item){
     set('viewDescription',  item.description);
     set('viewPurchase',     item.purchase_price!=null ? fmtMoney(item.purchase_price, item.currency) : null);
     set('viewPurchaseDate', item.purchase_date);
-  (function(){ try { if (item.purchase_date) { const d=new Date(item.purchase_date); const now=new Date(); const days=Math.floor((now - d)/(1000*60*60*24)); const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `${days} giorni`; } } catch(e){} })();
+    const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `—`;
+    (function(){ try { if (item.purchase_date) { const d=new Date(item.purchase_date); const now=new Date(); const days=Math.floor((now - d)/(1000*60*60*24)); const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `${days} giorni`; } } catch(e){} })();
     set('viewSale',         item.sale_price!=null ? fmtMoney(item.sale_price, item.currency) : null);
     set('viewSaleDate',     item.sale_date);
     set('viewLink',         item.marketplace_link);
     set('viewTags',         item.tags);
-  (function(){ const el=document.getElementById('viewToken'); if (!el) return; if (item.token) { el.textContent=item.token; el.style.display='inline-flex'; } else { el.textContent=''; el.style.display='none'; } })();
+    (function(){ const el=document.getElementById('viewToken'); if (!el) return; if (item.token) { el.textContent=item.token; el.style.display='inline-flex'; } else { el.textContent=''; el.style.display='none'; } })();
 
     // Info links (item level)
     const infoLinksArr = Array.isArray(item.info_links) ? item.info_links : [];

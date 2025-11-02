@@ -7,7 +7,7 @@ import io
 from dotenv import load_dotenv
 from datetime import datetime, date
 import json
-from app import db, hlp, gc
+from app import db, hlp, gc, dashboard, platform, prf 
 
 
 def create_app(db_path: str = "database.db") -> Flask:
@@ -31,45 +31,8 @@ def create_app(db_path: str = "database.db") -> Flask:
     app.config['UPLOAD_FOLDER'] = upload_folder
     # Initialize database on app creation
     db.init_db(app.config['DATABASE'])
+    dashboard.ensure_finance_snapshots_table(app.config['DATABASE'])
   
-    def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
-        """
-        Convert an amount from one currency to another using exchangerate.host free API.
-        If conversion fails or currencies are the same, returns the original amount.
-
-        Args:
-            amount (float): The amount to convert.
-            from_currency (str): ISO currency code of the source amount.
-            to_currency (str): ISO currency code of the target currency.
-
-        Returns:
-            float: The converted amount in the target currency.
-        """
-        if amount is None:
-            return None
-        # If currencies are missing or identical, return original amount
-        if not from_currency or not to_currency or from_currency == to_currency:
-            return amount
-        # Static approximate exchange rates relative to EUR. These can be updated as needed.
-        # Values represent how many EUR equals one unit of the currency. Example: 1 USD ≈ 0.93 EUR.
-        rates = {
-            'EUR': 1.0,
-            'USD': 0.93,
-            'JPY': 0.0062,
-            'GBP': 1.17,
-            'CNY': 0.13
-        }
-        from_cur = from_currency.upper()
-        to_cur = to_currency.upper()
-        if from_cur in rates and to_cur in rates:
-            # Convert amount to EUR then to target
-            try:
-                eur_amount = amount * rates[from_cur]
-                return eur_amount / rates[to_cur]
-            except Exception:
-                return amount
-        # If unknown currency, return original amount
-        return amount
 
     def estimate_valuation(item: sqlite3.Row) -> dict:
         """
@@ -140,9 +103,9 @@ def create_app(db_path: str = "database.db") -> Flask:
                 item_currency = item['currency']
                 if item_currency and item_currency.upper() != 'USD':
                     # Convert each value from USD to the item's currency
-                    fair_value = convert_currency(fair_value, 'USD', item_currency)
-                    price_p05 = convert_currency(price_p05, 'USD', item_currency)
-                    price_p95 = convert_currency(price_p95, 'USD', item_currency)
+                    fair_value = hlp.convert_currency(fair_value, 'USD', item_currency)
+                    price_p05 = hlp.convert_currency(price_p05, 'USD', item_currency)
+                    price_p95 = hlp.convert_currency(price_p95, 'USD', item_currency)
         except Exception:
             # Ignore conversion errors and keep values in USD
             pass
@@ -154,103 +117,103 @@ def create_app(db_path: str = "database.db") -> Flask:
             'valuation_date': val_date
         }
 
-    def compute_profile_stats(user: dict) -> dict:
-        """
-        Compute summary statistics for the user's collection in their reference currency.
+    # def compute_profile_stats(user: dict) -> dict:
+    #     """
+    #     Compute summary statistics for the user's collection in their reference currency.
 
-        Args:
-            user (dict): Dictionary representing the logged-in user, containing at least 'ref_currency'.
+    #     Args:
+    #         user (dict): Dictionary representing the logged-in user, containing at least 'ref_currency'.
 
-        Returns:
-            dict: A dictionary with total_spent, total_sold, roi, start_date, days_in_collection and currency keys.
-        """
-        ref = user.get('ref_currency') if user else None
-        # If no reference currency is set, return zeros without computing totals
-        if not ref:
-            return {
-                'total_spent': 0.0,
-                'total_sold': 0.0,
-                'roi': None,
-                'start_date': None,
-                'days_in_collection': None,
-                'currency': None
-            }
-        # Somme per le statistiche
-        total_spent_all: float = 0.0  # somma speso su tutti gli oggetti
-        total_spent_sold: float = 0.0  # somma speso solo per gli oggetti venduti
-        total_sold: float = 0.0        # somma venduto (incasso)
-        item_count: int = 0
-        first_date = None
-        # Fetch only the items belonging to this user
-        conn = db.get_db_connection(app.config['DATABASE'])
-        cur = conn.cursor()
-        user_id = user.get('id') if user else None
-        if user_id:
-            cur.execute("SELECT * FROM items WHERE user_id = ?", (user_id,))
-        else:
-            cur.execute("SELECT * FROM items WHERE 1=0")  # no items for anonymous user
-        items = cur.fetchall()
-        conn.close()
-        item_count = len(items)
-        for item in items:
-            # Calcola l'importo di acquisto convertito nella valuta di riferimento
-            purchase_val: float = 0.0
-            if item['purchase_price'] is not None:
-                try:
-                    amt = float(item['purchase_price'])
-                except Exception:
-                    amt = 0.0
-                if item['currency']:
-                    try:
-                        purchase_val = convert_currency(amt, item['currency'], ref)
-                    except Exception:
-                        purchase_val = amt
-                else:
-                    purchase_val = amt
-                total_spent_all += purchase_val
-            # Se l'oggetto è stato venduto, aggiungi il costo all'ammontare speso per ROI
-            if item['sale_price'] is not None:
-                if item['purchase_price'] is not None:
-                    total_spent_sold += purchase_val
-                # Calcola l'importo di vendita convertito
-                try:
-                    s_amt = float(item['sale_price'])
-                except Exception:
-                    s_amt = 0.0
-                sale_val = s_amt
-                if item['currency']:
-                    try:
-                        sale_val = convert_currency(s_amt, item['currency'], ref)
-                    except Exception:
-                        sale_val = s_amt
-                total_sold += sale_val
-            # Determina la data di acquisto più antica per calcolare la durata della collezione
-            if item['purchase_date']:
-                try:
-                    dt = datetime.strptime(item['purchase_date'], '%Y-%m-%d').date()
-                    if first_date is None or dt < first_date:
-                        first_date = dt
-                except Exception:
-                    pass
-        # ROI calcolato solo sugli oggetti venduti
-        roi = None
-        if total_spent_sold > 0:
-            roi = (total_sold - total_spent_sold) / total_spent_sold
-        start_date_str = None
-        days_in_collection = None
-        if first_date:
-            start_date_str = first_date.isoformat()
-            days_in_collection = (date.today() - first_date).days
-        return {
-            'total_spent': total_spent_sold,      # speso sui venduti
-            'total_spent_all': total_spent_all,  # speso complessivo (tutti gli oggetti)
-            'total_sold': total_sold,
-            'roi': roi,
-            'start_date': start_date_str,
-            'days_in_collection': days_in_collection,
-            'item_count': item_count,
-            'currency': ref
-        }
+    #     Returns:
+    #         dict: A dictionary with total_spent, total_sold, roi, start_date, days_in_collection and currency keys.
+    #     """
+    #     ref = user.get('ref_currency') if user else None
+    #     # If no reference currency is set, return zeros without computing totals
+    #     if not ref:
+    #         return {
+    #             'total_spent': 0.0,
+    #             'total_sold': 0.0,
+    #             'roi': None,
+    #             'start_date': None,
+    #             'days_in_collection': None,
+    #             'currency': None
+    #         }
+    #     # Somme per le statistiche
+    #     total_spent_all: float = 0.0  # somma speso su tutti gli oggetti
+    #     total_spent_sold: float = 0.0  # somma speso solo per gli oggetti venduti
+    #     total_sold: float = 0.0        # somma venduto (incasso)
+    #     item_count: int = 0
+    #     first_date = None
+    #     # Fetch only the items belonging to this user
+    #     conn = db.get_db_connection(app.config['DATABASE'])
+    #     cur = conn.cursor()
+    #     user_id = user.get('id') if user else None
+    #     if user_id:
+    #         cur.execute("SELECT * FROM items WHERE user_id = ?", (user_id,))
+    #     else:
+    #         cur.execute("SELECT * FROM items WHERE 1=0")  # no items for anonymous user
+    #     items = cur.fetchall()
+    #     conn.close()
+    #     item_count = len(items)
+    #     for item in items:
+    #         # Calcola l'importo di acquisto convertito nella valuta di riferimento
+    #         purchase_val: float = 0.0
+    #         if item['purchase_price'] is not None:
+    #             try:
+    #                 amt = float(item['purchase_price'])
+    #             except Exception:
+    #                 amt = 0.0
+    #             if item['currency']:
+    #                 try:
+    #                     purchase_val = hlp.convert_currency(amt, item['currency'], ref)
+    #                 except Exception:
+    #                     purchase_val = amt
+    #             else:
+    #                 purchase_val = amt
+    #             total_spent_all += purchase_val
+    #         # Se l'oggetto è stato venduto, aggiungi il costo all'ammontare speso per ROI
+    #         if item['sale_price'] is not None:
+    #             if item['purchase_price'] is not None:
+    #                 total_spent_sold += purchase_val
+    #             # Calcola l'importo di vendita convertito
+    #             try:
+    #                 s_amt = float(item['sale_price'])
+    #             except Exception:
+    #                 s_amt = 0.0
+    #             sale_val = s_amt
+    #             if item['currency']:
+    #                 try:
+    #                     sale_val = hlp.convert_currency(s_amt, item['currency'], ref)
+    #                 except Exception:
+    #                     sale_val = s_amt
+    #             total_sold += sale_val
+    #         # Determina la data di acquisto più antica per calcolare la durata della collezione
+    #         if item['purchase_date']:
+    #             try:
+    #                 dt = datetime.strptime(item['purchase_date'], '%Y-%m-%d').date()
+    #                 if first_date is None or dt < first_date:
+    #                     first_date = dt
+    #             except Exception:
+    #                 pass
+    #     # ROI calcolato solo sugli oggetti venduti
+    #     roi = None
+    #     if total_spent_sold > 0:
+    #         roi = (total_sold - total_spent_sold) / total_spent_sold
+    #     start_date_str = None
+    #     days_in_collection = None
+    #     if first_date:
+    #         start_date_str = first_date.isoformat()
+    #         days_in_collection = (date.today() - first_date).days
+    #     return {
+    #         'total_spent': total_spent_sold,      # speso sui venduti
+    #         'total_spent_all': total_spent_all,  # speso complessivo (tutti gli oggetti)
+    #         'total_sold': total_sold,
+    #         'roi': roi,
+    #         'start_date': start_date_str,
+    #         'days_in_collection': days_in_collection,
+    #         'item_count': item_count,
+    #         'currency': ref
+    #     }
 
     @app.route('/')
     def home():
@@ -368,8 +331,10 @@ def create_app(db_path: str = "database.db") -> Flask:
             if item['purchase_date']:
                 try:
                     purchase_date = datetime.strptime(item['purchase_date'], '%Y-%m-%d').date()
-                    today = date.today()
-                    delta = today - purchase_date
+                    if item['sale_date']:
+                        delta = datetime.strptime(item['sale_date'], '%Y-%m-%d').date() - purchase_date
+                    else:
+                        delta = date.today() - purchase_date 
                     time_in_collection = delta.days
                 except ValueError:
                     time_in_collection = None
@@ -463,7 +428,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                     conn.close()
                     user_ref = row['ref_currency'] if row else None
                 if purchase_price is not None and currency and user_ref:
-                    purchase_price_curr_ref = convert_currency(float(purchase_price), currency, user_ref)
+                    purchase_price_curr_ref = hlp.convert_currency(float(purchase_price), currency, user_ref)
         except Exception:
             # leave as None if conversion fails
             purchase_price_curr_ref = None
@@ -518,6 +483,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         if request.content_type and request.content_type.startswith('multipart/form-data'):
             # Update via form (potentially with image)
             form = request.form
+            item_view_mode = form.get('item_view_mode')
             files = request.files
             fields = []
             values = []
@@ -556,7 +522,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                         conn_ref.close()
                         user_ref = row_ref['ref_currency'] if row_ref else None
                     if user_ref and mapping.get('currency'):
-                        mapping['purchase_price_curr_ref'] = convert_currency(mapping['purchase_price'], mapping.get('currency'), user_ref)
+                        mapping['purchase_price_curr_ref'] = hlp.convert_currency(mapping['purchase_price'], mapping.get('currency'), user_ref)
                     else:
                         # leave as None when no conversion possible
                         mapping['purchase_price_curr_ref'] = None
@@ -619,7 +585,7 @@ def create_app(db_path: str = "database.db") -> Flask:
                         conn_ref.close()
                         user_ref = row_ref['ref_currency'] if row_ref else None
                     if user_ref and data.get('currency'):
-                        conv_val = convert_currency(float(data['purchase_price']), data.get('currency'), user_ref)
+                        conv_val = hlp.convert_currency(float(data['purchase_price']), data.get('currency'), user_ref)
                         fields.append("purchase_price_curr_ref = ?")
                         values.append(conv_val)
                     else:
@@ -680,7 +646,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         if amount is None or not from_cur or not to_cur:
             return jsonify({'error': 'Missing parameters'}), 400
         try:
-            result = convert_currency(amount, from_cur, to_cur)
+            result = hlp.convert_currency(amount, from_cur, to_cur)
             return jsonify({'result': result})
         except Exception:
             return jsonify({'error': 'Conversion failed'}), 500
@@ -697,7 +663,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             return jsonify({'error': 'Unauthorized'}), 401
         conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
-        cur.execute("SELECT id, username, nickname, ref_currency, theme FROM users WHERE id = ?", (user_id,))
+        cur.execute("SELECT id, username, nickname, ref_currency, theme, item_view_mode FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
         conn.close()
         if user:
@@ -708,19 +674,7 @@ def create_app(db_path: str = "database.db") -> Flask:
     @app.route('/api/profile/stats', methods=['GET'])
     @require_login
     def api_profile_stats():
-        """
-        Endpoint to compute and return the current logged-in user's collection statistics
-        in JSON format. Used by the front-end to refresh stats manually.
-        """
-        user_id = session.get('user_id')
-        conn = db.get_db_connection(app.config['DATABASE'])
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        user = cur.fetchone()
-        conn.close()
-        user_dict = dict(user) if user else {}
-        stats = compute_profile_stats(user_dict)
-        return jsonify(stats)
+        return prf.api_profile_stats(app.config['DATABASE'],app.config['UPLOAD_FOLDER'])
 
     @app.route('/api/items/<int:item_id>/valuation', methods=['GET'])
     @require_login
@@ -911,22 +865,6 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.close()
         return jsonify({'message': 'User deleted'})
 
-    @app.route('/home')
-    @require_login
-    def home_page():
-        """
-        Display the home page for the logged-in user. This shows a summary
-        of collection statistics similar to the profile page without the edit form.
-        """
-        user_id = session.get('user_id')
-        conn = db.get_db_connection(app.config['DATABASE'])
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        user = cur.fetchone()
-        conn.close()
-        user_dict = dict(user) if user else {}
-        stats = compute_profile_stats(user_dict)
-        return render_template('home.html', user=user_dict, stats=stats)
 
     @app.route('/api/export/csv', methods=['GET'])
     @require_login
@@ -1004,81 +942,28 @@ def create_app(db_path: str = "database.db") -> Flask:
         """
         return jsonify({'error': 'PDF export not implemented yet'}), 501
 
-    @app.route('/profile', methods=['GET', 'POST'])
+    @app.route('/home')
     @require_login
-    def profile():
+    def home_page():
         """
-        Display and edit the logged-in user's profile. Supports GET (view) and POST (update).
+        Display the home page for the logged-in user. This shows a summary
+        of collection statistics similar to the profile page without the edit form.
         """
         user_id = session.get('user_id')
         conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
-        if request.method == 'POST':
-            form = request.form
-            files = request.files
-            nickname = form.get('nickname')
-            ref_currency = form.get('ref_currency')
-            theme = form.get('theme')
-            vinted_link = form.get('vinted_link')
-            cardmarket_link = form.get('cardmarket_link')
-            ebay_link = form.get('ebay_link')
-            facebook_link = form.get('facebook_link')
-            profile_image = files.get('profile_image')
-            fields = []
-            values = []
-            if nickname is not None:
-                fields.append('nickname = ?')
-                values.append(nickname)
-            if ref_currency is not None:
-                fields.append('ref_currency = ?')
-                values.append(ref_currency)
-            if theme:
-                fields.append('theme = ?')
-                values.append(theme)
-            if vinted_link is not None:
-                fields.append('vinted_link = ?')
-                values.append(vinted_link)
-            if cardmarket_link is not None:
-                fields.append('cardmarket_link = ?')
-                values.append(cardmarket_link)
-            if ebay_link is not None:
-                fields.append('ebay_link = ?')
-                values.append(ebay_link)
-            if facebook_link is not None:
-                fields.append('facebook_link = ?')
-                values.append(facebook_link)
-            # Handle profile image upload
-            if profile_image and profile_image.filename:
-                ext = os.path.splitext(profile_image.filename)[1].lower()
-                if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']:
-                    unique_name = profile_image.filename
-                    save_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
-                    profile_image.save(save_path)
-                    image_rel_path = f"uploads/{unique_name}"
-                    fields.append('profile_image_path = ?')
-                    values.append(image_rel_path)
-            if fields:
-                values.append(user_id)
-                cur.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
-                conn.commit()
-            # Refresh user data after update
-            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-            user = cur.fetchone()
-            conn.close()
-            user_dict = dict(user) if user else {}
-            # Compute statistics for display
-            stats = compute_profile_stats(user_dict)
-            is_admin = user_dict.get('username') == 'admin'
-            return render_template('profile.html', user=user_dict, updated=True, stats=stats, is_admin=is_admin)
-        else:
-            # GET request: fetch user and compute stats
-            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-            user = cur.fetchone()
-            conn.close()
-            user_dict = dict(user) if user else {}
-            stats = compute_profile_stats(user_dict)
-            is_admin = user_dict.get('username') == 'admin'
-            return render_template('profile.html', user=user_dict, stats=stats, is_admin=is_admin)
+        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cur.fetchone()
+        conn.close()
+        user_dict = dict(user) if user else {}
+        stats = prf.compute_profile_stats(app.config['DATABASE'],app.config['UPLOAD_FOLDER'],user_dict)
+        return render_template('home.html', user=user_dict, stats=stats)
+
+    @app.route('/profile', methods=['GET', 'POST'])
+    @require_login
+    def profile():
+        return prf.profile_info(app.config['DATABASE'],app.config['UPLOAD_FOLDER'])
+
 
     @app.route('/api/ebay-estimate')
     @require_login
@@ -1159,16 +1044,6 @@ def create_app(db_path: str = "database.db") -> Flask:
             else:
                 stats = {'count': 0, 'currency': item.get('currency') or 'EUR'}
 
-            cur.execute("""
-                INSERT INTO ebay_price_history (item_id, date, avg, median, min, max, count, currency, keywords, site_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(item_id, date) DO UPDATE SET
-                    avg=excluded.avg, median=excluded.median, min=excluded.min, max=excluded.max,
-                    count=excluded.count, currency=excluded.currency, keywords=excluded.keywords, site_id=excluded.site_id
-            """, (item_id, today, stats.get('avg'), stats.get('median'), stats.get('min'), stats.get('max'),
-                    stats.get('count',0), stats.get('currency'), keywords, str(site_id)))
-            conn.commit()
-
             result['stats'] = stats
             result['samples'] = samples
             conn.close()
@@ -1179,15 +1054,6 @@ def create_app(db_path: str = "database.db") -> Flask:
             est = base_val * 1.1
             today = _dt.date.today().isoformat()
             stats = {'count': 0, 'avg': round(est,2), 'median': round(est,2), 'min': round(base_val*0.9,2), 'max': round(base_val*1.3,2), 'currency': item.get('currency') or 'EUR', 'stub': True}
-            cur.execute("""
-                INSERT INTO ebay_price_history (item_id, date, avg, median, min, max, count, currency, keywords, site_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(item_id, date) DO UPDATE SET
-                    avg=excluded.avg, median=excluded.median, min=excluded.min, max=excluded.max,
-                    count=excluded.count, currency=excluded.currency, keywords=excluded.keywords, site_id=excluded.site_id
-            """, (item_id, today, stats.get('avg'), stats.get('median'), stats.get('min'), stats.get('max'),
-                    stats.get('count',0), stats.get('currency'), keywords, str(site_id)))
-            conn.commit(); conn.close()
             result['stats'] = stats
             return jsonify(result), 200
 
@@ -2113,6 +1979,26 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.commit(); conn.close()
         return jsonify({'ok': True, 'links': clean})
 
+    # HOME
+    @app.route('/api/dashboard/summary')
+    def api_dashboard_summary():
+        uid = session.get('user_id')
+        if not uid:
+            return jsonify({'error': 'Unauthorized'}), 401
+        return dashboard.api_dashboard_summary(uid,app.config['DATABASE'])
+
+    @app.route('/api/dashboard/trend')
+    def api_dashboard_trend():
+        uid = session.get('user_id')
+        if not uid:
+            return jsonify({'error': 'Unauthorized'}), 401
+        return dashboard.api_dashboard_trend(uid,app.config['DATABASE'])
+
+
+    # PLATFORM INFO
+    @app.route('/api/platform/overview')
+    def api_platform_overview():
+        return platform.api_platform_overview(app.config['DATABASE'])
 
     return app
 

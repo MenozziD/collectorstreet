@@ -2,6 +2,45 @@ import json
 
 class hlp():
 
+    def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
+        """
+        Convert an amount from one currency to another using exchangerate.host free API.
+        If conversion fails or currencies are the same, returns the original amount.
+
+        Args:
+            amount (float): The amount to convert.
+            from_currency (str): ISO currency code of the source amount.
+            to_currency (str): ISO currency code of the target currency.
+
+        Returns:
+            float: The converted amount in the target currency.
+        """
+        if amount is None:
+            return None
+        # If currencies are missing or identical, return original amount
+        if not from_currency or not to_currency or from_currency == to_currency:
+            return amount
+        # Static approximate exchange rates relative to EUR. These can be updated as needed.
+        # Values represent how many EUR equals one unit of the currency. Example: 1 USD ≈ 0.93 EUR.
+        rates = {
+            'EUR': 1.0,
+            'USD': 0.93,
+            'JPY': 0.0062,
+            'GBP': 1.17,
+            'CNY': 0.13
+        }
+        from_cur = from_currency.upper()
+        to_cur = to_currency.upper()
+        if from_cur in rates and to_cur in rates:
+            # Convert amount to EUR then to target
+            try:
+                eur_amount = amount * rates[from_cur]
+                return eur_amount / rates[to_cur]
+            except Exception:
+                return amount
+        # If unknown currency, return original amount
+        return amount
+
     def _parse_links_field(val):
         """Accetta stringa JSON o lista; restituisce sempre una lista di stringhe http/https."""
         if not val:

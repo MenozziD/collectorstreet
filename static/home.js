@@ -1,74 +1,6 @@
 // home.js - Gestisce la visualizzazione della dashboard Home
 
 document.addEventListener('DOMContentLoaded', () => {
-    /**
-     * Recupera le statistiche dal server e aggiorna grafici e indicatori.
-     */
-    async function fetchStats() {
-        try {
-            const res = await fetch('/api/profile/stats');
-            if (!res.ok) return;
-            const stats = await res.json();
-            updateStatsCard(stats);
-        } catch (err) {
-            console.error('Errore nel recupero delle statistiche', err);
-        }
-    }
-
-    /**
-     * Aggiorna i grafici e gli indicatori della card statistiche.
-     * Calcola la larghezza relativa delle barre rispetto al valore massimo.
-     * @param {Object} stats Oggetto con totale speso, venduto, roi e valuta
-     */
-    function updateStatsCard(stats) {
-        // Usa la spesa complessiva per confrontare con il totale venduto.
-        const totalSpent = stats.total_spent_all || 0;
-        const totalSold = stats.total_sold || 0;
-        const maxVal = Math.max(totalSpent, totalSold, 1);
-        const spentBar = document.querySelector('.bar.spent');
-        const soldBar = document.querySelector('.bar.sold');
-        if (spentBar && soldBar) {
-            const spentWidth = (totalSpent / maxVal) * 100;
-            const soldWidth = (totalSold / maxVal) * 100;
-            spentBar.style.width = spentWidth + '%';
-            soldBar.style.width = soldWidth + '%';
-            spentBar.setAttribute('title', `${totalSpent.toFixed(2)} ${stats.currency || ''}`);
-            soldBar.setAttribute('title', `${totalSold.toFixed(2)} ${stats.currency || ''}`);
-        }
-        // Aggiorna i valori numerici
-        const spentValEl = document.getElementById('totalSpentVal');
-        const soldValEl = document.getElementById('totalSoldVal');
-        if (spentValEl) {
-            spentValEl.textContent = stats.currency ? `${(stats.total_spent_all || 0).toFixed(2)} ${stats.currency}` : '-';
-        }
-        if (soldValEl) {
-            soldValEl.textContent = stats.currency ? `${(stats.total_sold || 0).toFixed(2)} ${stats.currency}` : '-';
-        }
-        // Aggiorna ROI
-        const roiSpan = document.getElementById('roiPercentage');
-        if (roiSpan) {
-            if (stats.currency && stats.roi !== null && stats.roi !== undefined) {
-                const roiPercent = stats.roi * 100;
-                roiSpan.textContent = roiPercent.toFixed(2) + '%';
-                roiSpan.style.color = roiPercent >= 0 ? '#28a745' : '#d9534f';
-            } else {
-                roiSpan.textContent = '-';
-                roiSpan.style.color = '';
-            }
-        }
-
-        // Aggiorna card informative: numero oggetti e giorni di collezione
-        const infoItemsCard = document.getElementById('infoItemsCard');
-        if (infoItemsCard) {
-            const p = infoItemsCard.querySelector('p');
-            p.textContent = stats.item_count !== null && stats.item_count !== undefined ? stats.item_count : '-';
-        }
-        const infoPeriodCard = document.getElementById('infoPeriodCard');
-        if (infoPeriodCard) {
-            const p = infoPeriodCard.querySelector('p');
-            p.textContent = stats.days_in_collection !== null && stats.days_in_collection !== undefined ? stats.days_in_collection : '-';
-        }
-    }
 
     /**
      * Recupera gli ultimi oggetti dell'utente per popolare le card di attività personali.
@@ -210,10 +142,44 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBtn.addEventListener('click', fetchStats);
     }
 
+    // ===== Platform Overview =====
+    async function initPlatformOverview(){
+        try{
+            const r = await fetch('/api/platform/overview');
+            const data = await r.json();
+            if (!data) return;
+            const u = document.getElementById('pfUsers');
+            const i = document.getElementById('pfItems');
+            const v = document.getElementById('pfVer');
+            if (u) u.textContent = (data.total_users ?? '—');
+            if (i) i.textContent = (data.total_items ?? '—');
+            if (v) v.textContent = (data.ver ?? '—');
+
+            const c = document.getElementById('pfTopTags');
+            if (c){
+            c.innerHTML = '';
+            const tags = Array.isArray(data.top_tags) ? data.top_tags : [];
+            tags.forEach(t => {
+                const span = document.createElement('span');
+                span.className = 'tag-pill';
+                span.title = `#${t.tag} (${t.count})`;
+                span.textContent = `#${t.tag} (${t.count})`;
+                c.appendChild(span);
+            });
+            if (!tags.length){
+                c.innerHTML = '<span class="muted">Nessun tag disponibile</span>';
+            }
+            }
+        }catch(e){
+            console.warn('platform overview fail', e);
+        }
+    }
+
     // Inizializza la pagina caricando statistiche e attività
-    fetchStats();
     fetchPersonalActivity();
     fetchGlobalActivity();
+
+    try { initPlatformOverview(); } catch(e){}
 
     // Recupera notizie rilevanti in base ai tag degli oggetti della collezione
     fetchNews();
