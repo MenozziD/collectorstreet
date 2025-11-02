@@ -210,10 +210,130 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBtn.addEventListener('click', fetchStats);
     }
 
+    // ===== Dashboard =====
+    async function initDashboard()
+    {
+        try{
+            const s = await fetch('/api/dashboard/summary'); 
+            const summary = await s.json();
+            if (!summary.error){
+            setKPI('kpiSpent', summary.tot_spent);
+            setKPI('kpiSold', summary.tot_sold);
+            setKPI('kpiProfit', summary.profit_realized);
+            setKPI('kpiInCollection', summary.in_collection);
+            setKPI('kpiForSale', summary.for_sale);
+            setKPI('kpiAvgDays', summary.avg_days_in_collection);
+            }
+        }catch(e){ console.warn('summary fail', e); }
+        
+        try{
+            const r = await fetch('/api/dashboard/trend');
+            const data = await r.json();
+            if (data && Array.isArray(data.points)){
+            renderTrendChart(data.points);
+            }
+        }catch(e){ console.warn('trend fail', e); }
+        
+    }
+
+    function setKPI(id, val)
+    {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (val === null || val === undefined) { el.textContent = '—'; return; }
+        if (typeof val === 'number'){
+            if (id === 'kpiSpent' || id === 'kpiSold' || id === 'kpiProfit'){
+            el.textContent = formatMoney(val);
+            } else {
+            el.textContent = String(Math.round(val));
+            }
+        } else {
+            el.textContent = String(val);
+        }
+    }
+
+    function formatMoney(v)
+    { 
+        try { return (window.USER_REF_CURRENCY || 'EUR') + ' ' + Number(v).toFixed(2); }
+        catch(e){ return String(v); }
+    }
+
+    let trendChartInstance = null;
+    
+    function renderTrendChart(points)
+    {
+        const labels = points.map(p => p.month);
+        const spent = points.map(p => p.spent);
+        const sold  = points.map(p => p.sold);
+
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        if (trendChartInstance){ trendChartInstance.destroy(); }
+        trendChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+            labels,
+            datasets: [
+                { label: 'Speso',  data: spent, borderColor: '#9aa5b1', backgroundColor: 'rgba(154,165,177,0.15)', tension: 0.25, fill: true },
+                { label: 'Venduto',data: sold,  borderColor: '#4f8cff', backgroundColor: 'rgba(79,140,255,0.12)', tension: 0.25, fill: true }
+            ]
+            },
+            options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: { beginAtZero: true, ticks: { callback: (v)=> formatMoney(v) } },
+                x: { ticks: { maxRotation: 0, autoSkip: true } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (ctx)=> `${ctx.dataset.label}: ${formatMoney(ctx.parsed.y)}` } }
+            },
+            elements: { point: { radius: 2 } }
+            }
+        });
+    }
+
+    // ===== Platform Overview =====
+    async function initPlatformOverview(){
+        try{
+            const r = await fetch('/api/platform/overview');
+            const data = await r.json();
+            if (!data) return;
+            const u = document.getElementById('pfUsers');
+            const i = document.getElementById('pfItems');
+            const v = document.getElementById('pfVer');
+            if (u) u.textContent = (data.total_users ?? '—');
+            if (i) i.textContent = (data.total_items ?? '—');
+            if (v) v.textContent = (data.ver ?? '—');
+
+            const c = document.getElementById('pfTopTags');
+            if (c){
+            c.innerHTML = '';
+            const tags = Array.isArray(data.top_tags) ? data.top_tags : [];
+            tags.forEach(t => {
+                const span = document.createElement('span');
+                span.className = 'tag-pill';
+                span.title = `#${t.tag} (${t.count})`;
+                span.textContent = `#${t.tag} (${t.count})`;
+                c.appendChild(span);
+            });
+            if (!tags.length){
+                c.innerHTML = '<span class="muted">Nessun tag disponibile</span>';
+            }
+            }
+        }catch(e){
+            console.warn('platform overview fail', e);
+        }
+    }
+
     // Inizializza la pagina caricando statistiche e attività
     fetchStats();
     fetchPersonalActivity();
     fetchGlobalActivity();
+
+    // Dashboard
+    try { initDashboard(); } catch(e){}
+    try { initPlatformOverview(); } catch(e){}
 
     // Recupera notizie rilevanti in base ai tag degli oggetti della collezione
     fetchNews();

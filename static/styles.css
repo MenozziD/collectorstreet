@@ -3,6 +3,19 @@
     box-sizing: border-box;
 }
 
+.color-palette
+{
+   color: #2cc0d2;
+   color: #28adbd;
+   color: #2bc2d0;
+   color: #4ccfdc; 
+   color: #234f62;
+   color: #326677;
+   color: #071e2c;
+
+
+}
+
 body {
     font-family: 'Segoe UI', Arial, sans-serif;
     background-color: #f5f7f9;
@@ -23,7 +36,7 @@ nav {
 
 nav h1 {
     font-size: 1.5em;
-    color: #008489;
+    color: #2cc0d2;
     margin: 0;
 }
 
@@ -31,7 +44,7 @@ nav .actions button {
     margin-left: 10px;
     padding: 6px 12px;
     border: none;
-    background-color: #008489;
+    background-color: #2cc0d2;
     color: #ffffff;
     border-radius: 4px;
     cursor: pointer;
@@ -42,7 +55,7 @@ nav .actions button {
 nav .actions .nav-btn {
     margin-left: 10px;
     padding: 6px 12px;
-    background-color: #008489;
+    background-color: #2cc0d2;
     color: #ffffff;
     border-radius: 4px;
     text-decoration: none;
@@ -100,7 +113,7 @@ nav .actions button:hover {
     margin-top: 0;
     margin-bottom: 10px;
     font-size: 1.2em;
-    color: #008489;
+    color: #2cc0d2;
 }
 
 .item-card p {
@@ -202,7 +215,7 @@ nav .actions button:hover {
 .tag {
     display: inline-block;
     background-color: #e2f2f4;
-    color: #008489;
+    color: #2cc0d2;
     padding: 2px 6px;
     margin-right: 4px;
     margin-bottom: 4px;
@@ -223,6 +236,7 @@ nav .actions button:hover {
     border: none;
     border-radius: 4px;
     cursor: pointer;
+    background-color: #2cc0d2;
     color: #ffffff;
     font-size: 0.85em;
 }
@@ -277,7 +291,7 @@ nav .actions button:hover {
 
 .login-container h2 {
     margin-top: 0;
-    color: #008489;
+    color: #2cc0d2;
 }
 
 .login-container input {
@@ -291,7 +305,7 @@ nav .actions button:hover {
 .login-container button {
     width: 100%;
     padding: 10px;
-    background-color: #008489;
+    background-color: #2cc0d2;
     border: none;
     color: #ffffff;
     border-radius: 4px;
@@ -354,7 +368,7 @@ nav .actions button:hover {
 .modal-content button[type="submit"] {
     width: 100%;
     padding: 10px;
-    background-color: #008489;
+    background-color: #2cc0d2;
     border: none;
     color: #ffffff;
     border-radius: 4px;
@@ -429,7 +443,7 @@ nav .actions button:hover {
 }
 
 .profile-links a {
-    color: #008489;
+    color: #2cc0d2;
     text-decoration: none;
 }
 
@@ -458,7 +472,7 @@ nav .actions button:hover {
 .profile-form button {
     margin-top: 15px;
     padding: 8px;
-    background-color: #008489;
+    background-color: #2cc0d2;
     border: none;
     color: #ffffff;
     border-radius: 4px;
@@ -490,7 +504,7 @@ nav .actions button:hover {
 .update-stats-btn {
     margin-bottom: 10px;
     padding: 6px 12px;
-    background-color: #008489;
+    background-color: #2cc0d2;
     border: none;
     color: #ffffff;
     border-radius: 4px;
@@ -518,15 +532,22 @@ nav .actions button:hover {
 /* Grafico a barre per speso vs venduto */
 .bar-chart {
     display: flex;
-    height: 20px;
+    flex-direction: column;
+    gap: 2px;
+    height: 24px;
     margin-bottom: 10px;
     background-color: #e9ecef;
     border-radius: 10px;
     overflow: hidden;
 }
-.bar {
-    height: 100%;
+
+.bar-chart .bar{
+  width: 0;                 /* verrà impostata dal JS in % */
+  height: 16px;
+  border-radius: 999px;
+  transition: width .35s ease;
 }
+
 .bar.spent {
     background-color: #d9534f; /* rosso per il totale speso */
 }
@@ -566,7 +587,7 @@ nav .actions button:hover {
 
 .feed-card h4 {
     margin-top: 0;
-    color: #008489;
+    color: #2cc0d2;
 }
 
 .feed-card p {
@@ -625,7 +646,7 @@ nav .sub-actions.icons {
     border-radius: 8px;
     border: 1px solid #dddddd;
     background: #ffffff;
-    color: #008489;
+    color: #2cc0d2;
     cursor: pointer;
     text-decoration: none;
 }
@@ -639,7 +660,7 @@ nav .sub-actions.icons {
     border-radius: 8px;
     border: 1px solid #dddddd;
     background: #ffffff;
-    color: #008489;
+    color: #2cc0d2;
     cursor: pointer;
     text-decoration: none;
 }
@@ -648,7 +669,7 @@ nav .sub-actions.icons {
 }
 .icon-btn.primary {
     color: #ffffff;
-    background: #008489;
+    background: #2cc0d2;
     border-color: #007174;
 }
 .icon-btn.primary:hover {
@@ -782,7 +803,7 @@ body.theme-sakura .hint.ok { color: #5cb85c; }
     margin: 12px 0 4px;
     font-size: 0.95rem;
     font-weight: 600;
-    color: #008489;
+    color: #2cc0d2;
 }
 .field-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
 .hint {
@@ -821,7 +842,7 @@ body.theme-sakura .hint.ok { color: #5cb85c; }
 .market-estimate .est-content { margin-top:8px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
 .market-estimate .pill { display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #e6e6e6; border-radius:999px; padding:6px 10px; }
 .market-estimate .samples { margin-top:8px; font-size:.85rem; color:#64748b; }
-.market-estimate .samples a { color:#008489; }
+.market-estimate .samples a { color:#2cc0d2; }
 @media (max-width: 920px){ .view-body { grid-template-columns: 1fr; } }
 
 
@@ -970,4 +991,38 @@ body.theme-sakura .chip, body.theme-sakura .tag-pill { background:#fff; border-c
   padding: 2px 6px;
   border-radius: 10px;
   font-size: 0.8rem;
+}
+
+/* ===== Dashboard Styles ===== */
+.dashboard { margin: 12px 0 20px; }
+.dash-row { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+.dash-card { background: var(--card-bg, #fff); border: 1px solid rgba(0,0,0,.08); border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.03);margin-bottom: 1%; }
+.dash-card.subtle { background: transparent; border-style: dashed; }
+.dash-card-header { display:flex; align-items:center; justify-content:space-between; gap: 12px; margin-bottom: 8px; }
+.dash-card-inline { display:inline-block; align-items:left; gap: 2px; margin-bottom: 8px; }
+.dash-card h3 { margin: 0; font-size: 1.05rem; }
+.dash-legend { font-size: .85rem; color: #6b7280; display:flex; gap:12px; align-items:center; }
+.dash-legend .legend { display:inline-block; width:10px; height:10px; border-radius:50%; }
+.dash-legend .legend.spent { background:#9aa5b1; }
+.dash-legend .legend.sold  { background:#4f8cff; }
+.kpis { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+.kpi { background: rgba(0,0,0,.02); border: 1px solid rgba(0,0,0,.06); border-radius:10px; padding:10px; }
+.kpi-line { background: rgba(0,0,0,.02); border: 1px solid rgba(0,0,0,.06); margin-left:10px; border-radius:10px;
+            padding-left:4px;
+            padding-right:4px;
+            display: inline;
+            vertical-align: middle;}
+.kpi-label { color:#6b7280; font-size:.85rem; margin-bottom:4px; }
+.kpi-label { color:#6b7280; font-size:.85rem; margin-bottom:4px; font-style: italic; }
+.kpi-value { font-weight:600; font-size:1.1rem; }
+#trendChart { width:100%; height:260px; }
+
+.platform-kpis { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 10px; }
+.top-tags .tag-cloud { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+.tag-pill { background: rgba(79,140,255,0.1); color:#1f3a93; border:1px solid rgba(79,140,255,0.35); padding:3px 8px; border-radius:12px; font-size:.85rem; }
+
+@media (max-width: 800px){
+  .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .platform-kpis { grid-template-columns: 1fr; }
+  #trendChart { height:220px; }
 }

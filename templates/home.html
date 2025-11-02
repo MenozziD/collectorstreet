@@ -4,37 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Collector Street - Home</title>
+    <!-- ICO fallback (tutti i browser) -->
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon" sizes="16x16 32x32">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="theme-{{ (user.theme if (user is defined and user and user.theme) else 'original') }}" style="-ms-overflow-style: none;">
     
-    <nav>
-        <h1 class="logo-title">Collector Street</h1>
+    <nav style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;padding-top: 0.5%;">
+        <div class="logo-title" style="border-top: 0%; border-bottom: 0%; padding-bottom: 0%;">
+            <img id="applogo" src="/static/icons/logo-lockup.png" style="width: 40%;border-top: 0%; border-bottom: 0%; padding-bottom: 0%;" alt="App logo">
+        </div>
         <div class="actions icons">
             <a href="/home" class="icon-btn" title="Home" aria-label="Home">
-                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
                     <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-10.5z" fill="currentColor"/>
                 </svg>
             </a>
             <a href="/" class="icon-btn" title="Collezione" aria-label="Collezione">
-                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
                     <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" fill="currentColor"/>
                 </svg>
             </a>
-            
             <a href="/profile" class="icon-btn" title="Profilo" aria-label="Profilo">
-                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="48" height="48" aria-hidden="true">
                     <path d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z" fill="currentColor"/>
                 </svg>
             </a>
         </div>
-        <div class="sub-actions icons">
-            <!-- EXPORT_SLOT 
-            <button id="logoutBtn" class="icon-btn danger" title="Logout" aria-label="Logout">
-                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-                    <path d="M10 17l1.41-1.41L8.83 13H21v-2H8.83l2.58-2.59L10 7l-5 5 5 5zM4 19h7v2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7v2H4z" fill="currentColor"/>
-                </svg>
-            </button>-->
+        <div class="sub-actions icons">           
         </div>
     </nav>
 
@@ -43,17 +41,67 @@
         <!-- Card statistiche con grafici e indicatori -->
         <div class="stats-card">
             <h3>Statistiche collezione</h3>
+            <div class="stats-numbers">
+                <span><strong>Speso:</strong> <span id="totalSpentVal">-</span></span>
+            </div>
             <div class="bar-chart">
                 <div class="bar spent" style="width:0%"></div>
                 <div class="bar sold" style="width:0%"></div>
             </div>
             <div class="stats-numbers">
-                <span><strong>Speso:</strong> <span id="totalSpentVal">-</span></span>
                 <span><strong>Venduto:</strong> <span id="totalSoldVal">-</span></span>
             </div>
             <div class="roi-indicator"><strong>ROI:</strong> <span id="roiPercentage">-</span></div>
             <button type="button" id="updateStatsBtn" class="update-stats-btn">Aggiorna statistiche</button>
         </div>
+        <div class="dash-row">
+            <div class="dash-card kpis">
+            <div class="kpi"><div class="kpi-label">Totale Speso</div><div class="kpi-value" id="kpiSpent">—</div></div>
+            <div class="kpi"><div class="kpi-label">Totale Venduto</div><div class="kpi-value" id="kpiSold">—</div></div>
+            <div class="kpi"><div class="kpi-label">Profitto Realizzato</div><div class="kpi-value" id="kpiProfit">—</div></div>
+            <div class="kpi"><div class="kpi-label">In Collezione</div><div class="kpi-value" id="kpiInCollection">—</div></div>
+            <div class="kpi"><div class="kpi-label">In Vendita</div><div class="kpi-value" id="kpiForSale">—</div></div>
+            <div class="kpi"><div class="kpi-label">Giorni Medi in Collezione</div><div class="kpi-value" id="kpiAvgDays">—</div></div>
+            </div>
+        </div>
+        <div class="dash-row">
+            <div class="dash-card">
+            <div class="dash-card-header">
+                <h3>Trend Spesa vs Venduto</h3>
+                <div class="dash-legend"><span class="legend spent"></span> Speso <span class="legend sold"></span> Venduto</div>
+            </div>
+            <canvas id="trendChart" height="200px"></canvas>
+            </div>
+        </div>
+        <div class="dash-row">
+            <div class="dash-card subtle">
+            <div class="dash-card-header"><h3>Altri indicatori (placeholder)</h3></div>
+            <div class="muted">
+                Predisposta tabella <code>user_finance_daily</code> per future metriche (inventory_value, items_bought, items_sold, note).
+            </div>
+            </div>
+        </div>
+
+        <!-- Platform Overview -->
+        <div class="dash-card">
+            <div class="dash-row">
+                <div class="title-wrapper">
+                    <h3>Statistiche Piattaforma</h3>
+                    <div class="kpi-line">
+                        <label class="kpi-label" style="margin-left: 2px;">Ver:</label>
+                        <label class="kpi-label" style="margin-left: 2px;"id="pfVer">—</label>
+                    </div>
+                </div>
+                <div class="platform-kpis">
+                    <div class="kpi"><div class="kpi-label">Utenti iscritti</div><div class="kpi-value" id="pfUsers">—</div></div>
+                    <div class="kpi"><div class="kpi-label">Oggetti totali</div><div class="kpi-value" id="pfItems">—</div></div>
+                </div>
+                <div class="top-tags">
+                    <div class="kpi-label">Top 5 Tag</div>
+                    <div id="pfTopTags" class="tag-cloud"></div>
+                </div>
+            </div>
+        </div>      
         <!-- Feed di news e attività -->
         <div class="feed-container">
             <!-- Due card di news con placeholder. In futuro saranno rimpiazzate da feed RSS personalizzati -->
@@ -93,8 +141,9 @@
             {% endif %}
         </div>
     </section>
-    <!-- Script per gestione logout e dashboard -->
+
     <!-- Script dedicato alla pagina Home -->
     <script type="module" src="{{ url_for('static', filename='home.js') }}"></script>
 </body>
+
 </html>

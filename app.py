@@ -7,7 +7,7 @@ import io
 from dotenv import load_dotenv
 from datetime import datetime, date
 import json
-from app import db, hlp, gc
+from app import db, hlp, gc, dashboard, platform
 
 
 def create_app(db_path: str = "database.db") -> Flask:
@@ -31,6 +31,7 @@ def create_app(db_path: str = "database.db") -> Flask:
     app.config['UPLOAD_FOLDER'] = upload_folder
     # Initialize database on app creation
     db.init_db(app.config['DATABASE'])
+    dashboard.ensure_finance_snapshots_table(app.config['DATABASE'])
   
     def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
         """
@@ -2101,6 +2102,26 @@ def create_app(db_path: str = "database.db") -> Flask:
         conn.commit(); conn.close()
         return jsonify({'ok': True, 'links': clean})
 
+    # HOME
+    @app.route('/api/dashboard/summary')
+    def api_dashboard_summary():
+        uid = session.get('user_id')
+        if not uid:
+            return jsonify({'error': 'Unauthorized'}), 401
+        return dashboard.api_dashboard_summary(uid,app.config['DATABASE'])
+
+    @app.route('/api/dashboard/trend')
+    def api_dashboard_trend():
+        uid = session.get('user_id')
+        if not uid:
+            return jsonify({'error': 'Unauthorized'}), 401
+        return dashboard.api_dashboard_trend(uid,app.config['DATABASE'])
+
+
+    # PLATFORM INFO
+    @app.route('/api/platform/overview')
+    def api_platform_overview():
+        return platform.api_platform_overview(app.config['DATABASE'])
 
     return app
 
