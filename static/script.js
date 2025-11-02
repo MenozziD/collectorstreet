@@ -1,5 +1,5 @@
 // import the variables and function from module.js
-import { renderMarketParamsFields, renderLinks } from './render.js';
+import { renderMarketParamsFields, renderLinks, collectMarketParams } from './render.js';
 
 
 let USER_ITEM_VIEW_MODE = 'standard';
@@ -263,7 +263,8 @@ function initApp() {
                 // Include prezzo in valuta di riferimento se presente
                 const refValJson = document.getElementById('purchasePriceRef').value;
                 payload.purchase_price_curr_ref = refValJson ? parseFloat(refValJson) : null;
-                const mp = collectMarketParams(); if (Object.keys(mp).length) payload.market_params = mp;
+                const mp = collectMarketParams();
+                if (Object.keys(mp).length) payload.market_params = mp;
                 res = await fetch('/api/items', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1010,7 +1011,19 @@ function renderSecondaryMarketSection(item){
     return None
 }
 
+function clearViewModal()
+{
+    document.getElementById('viewDescription').value = '';
+    document.getElementById('viewPurchase').value = '';
+    document.getElementById('viewPurchaseDate').value = '';
+    document.getElementById('viewDaysInCollection').value = '';
+    document.getElementById('viewSale').value = '';
+    document.getElementById('viewSaleDate').value = '';
+    document.getElementById('viewInfoLinks').value = '';
+}
+
 function openViewModal(item){
+    
     const m = document.getElementById('viewItemModal');
     const set = (id, val) => {
     const el = document.getElementById(id);
@@ -1022,7 +1035,7 @@ function openViewModal(item){
         el.textContent = val || '—';
     }
     };
-
+    clearViewModal();
     document.getElementById('viewName').textContent = item.name || '(senza nome)';
     //document.getElementById('viewSubtitle').textContent = (item.category||'') + (item.language?(' · '+item.language):'');
     const img = document.getElementById('viewImage');
@@ -1035,7 +1048,8 @@ function openViewModal(item){
     set('viewDescription',  item.description);
     set('viewPurchase',     item.purchase_price!=null ? fmtMoney(item.purchase_price, item.currency) : null);
     set('viewPurchaseDate', item.purchase_date);
-  (function(){ try { if (item.purchase_date) { const d=new Date(item.purchase_date); const now=new Date(); const days=Math.floor((now - d)/(1000*60*60*24)); const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `${days} giorni`; } } catch(e){} })();
+    const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `—`;
+    (function(){ try { if (item.purchase_date) { const d=new Date(item.purchase_date); const now=new Date(); const days=Math.floor((now - d)/(1000*60*60*24)); const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `${days} giorni`; } } catch(e){} })();
     set('viewSale',         item.sale_price!=null ? fmtMoney(item.sale_price, item.currency) : null);
     set('viewSaleDate',     item.sale_date);
     set('viewLink',         item.marketplace_link);
