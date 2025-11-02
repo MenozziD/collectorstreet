@@ -316,22 +316,6 @@ function initApp() {
     }
     });
 
-    const _openModalOrig = window.openModal;
-    window.openModal = function(editItem = null){
-        if (typeof _openModalOrig === 'function') _openModalOrig.apply(this, arguments);
-
-        // inizializza stati
-        stateInfoLinks = Array.isArray(editItem?.info_links) ? [...editItem.info_links] : [];
-        stateMarketplaceLinks = Array.isArray(editItem?.marketplace_links) ? [...editItem.marketplace_links] : [];
-
-        renderLinks(stateInfoLinks, 'infoLinksItemList');
-        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
-
-        // pulisci input
-        const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
-        const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
-    };
-
 }
 
 // Calcola automaticamente il prezzo di acquisto nella valuta di riferimento dell'utente
@@ -711,6 +695,16 @@ function openModal(item = null) {
         if (purchasePriceRef) {
             purchasePriceRef.value = (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined) ? item.purchase_price_curr_ref : '';
         }
+        // Links Info e MarketPlace
+        // inizializza stati
+        stateInfoLinks = Array.isArray(item?.info_links) ? [...item.info_links] : [];
+        stateMarketplaceLinks = Array.isArray(item?.marketplace_links) ? [...item.marketplace_links] : [];
+        // Render Link già presenti
+        renderLinks(stateInfoLinks, 'infoLinksItemList');
+        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+        // pulisci input
+        const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
+        const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
     } else {
         modalTitle.textContent = 'Nuovo Item';
         toggleAdvancedBtn.style="display: None";
@@ -1011,17 +1005,6 @@ function renderSecondaryMarketSection(item){
     return None
 }
 
-function clearViewModal()
-{
-    document.getElementById('viewDescription').value = '';
-    document.getElementById('viewPurchase').value = '';
-    document.getElementById('viewPurchaseDate').value = '';
-    document.getElementById('viewDaysInCollection').value = '';
-    document.getElementById('viewSale').value = '';
-    document.getElementById('viewSaleDate').value = '';
-    document.getElementById('viewInfoLinks').value = '';
-}
-
 function openViewModal(item){
     
     const m = document.getElementById('viewItemModal');
@@ -1035,7 +1018,6 @@ function openViewModal(item){
         el.textContent = val || '—';
     }
     };
-    clearViewModal();
     document.getElementById('viewName').textContent = item.name || '(senza nome)';
     //document.getElementById('viewSubtitle').textContent = (item.category||'') + (item.language?(' · '+item.language):'');
     const img = document.getElementById('viewImage');
@@ -1054,7 +1036,7 @@ function openViewModal(item){
     set('viewSaleDate',     item.sale_date);
     set('viewLink',         item.marketplace_link);
     set('viewTags',         item.tags);
-  (function(){ const el=document.getElementById('viewToken'); if (!el) return; if (item.token) { el.textContent=item.token; el.style.display='inline-flex'; } else { el.textContent=''; el.style.display='none'; } })();
+    (function(){ const el=document.getElementById('viewToken'); if (!el) return; if (item.token) { el.textContent=item.token; el.style.display='inline-flex'; } else { el.textContent=''; el.style.display='none'; } })();
 
     // Info links (item level)
     const infoLinksArr = Array.isArray(item.info_links) ? item.info_links : [];
