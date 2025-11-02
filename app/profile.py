@@ -71,7 +71,8 @@ class dashboard():
             'latest_snapshot': None #latest_snapshot
         })
 
-    def api_dashboard_trend(uid,db_string):
+    def api_dashboard_trend(db_string):
+        uid = session.get('user_id')
         conn = db.get_db_connection(db_string)
         cur = conn.cursor()
 

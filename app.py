@@ -1992,7 +1992,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         uid = session.get('user_id')
         if not uid:
             return jsonify({'error': 'Unauthorized'}), 401
-        return dashboard.api_dashboard_trend(uid,app.config['DATABASE'])
+        return dashboard.api_dashboard_trend(app.config['DATABASE'])
 
 
     # PLATFORM INFO
@@ -2008,44 +2008,4 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
 
 
-@app.route('/api/global-catalog/<int:gid>/info-links', methods=['GET'])
-@require_login
-def get_global_info_links(gid):
-    conn = db.get_db_connection(app.config['DATABASE'])
-    cur = conn.cursor()
-    cur.execute("SELECT info_links FROM global_catalog WHERE id=?", (gid,))
-    row = cur.fetchone()
-    conn.close()
-    if not row:
-        return jsonify({'error':'not found'}), 404
-    raw = row['info_links'] if isinstance(row, dict) else row[0]
-    try:
-        links = json.loads(raw) if raw else []
-    except Exception:
-        links = []
-    out = []
-    if isinstance(links, list):
-        for x in links:
-            if isinstance(x, str): out.append(x)
-            elif isinstance(x, dict) and x.get('url'): out.append(x['url'])
-    return jsonify({'links': out})
 
-@app.route('/api/global-catalog/<int:gid>/info-links', methods=['PUT'])
-@require_login
-def put_global_info_links(gid):
-    data = request.get_json(silent=True) or {}
-    links = data.get('links') or []
-    clean = []
-    if isinstance(links, list):
-        for x in links:
-            if not x: continue
-            if isinstance(x, str): u = x.strip()
-            elif isinstance(x, dict) and x.get('url'): u = str(x['url']).strip()
-            else: continue
-            if u.startswith('http://') or u.startswith('https://'):
-                clean.append(u)
-    conn = db.get_db_connection(app.config['DATABASE'])
-    cur = conn.cursor()
-    cur.execute("UPDATE global_catalog SET info_links=?, updated_at=? WHERE id=?", (json.dumps(clean, ensure_ascii=False), datetime.datetime.utcnow().isoformat(), gid))
-    conn.commit(); conn.close()
-    return jsonify({'ok': True, 'links': clean})
