@@ -1994,6 +1994,9 @@ def create_app(db_path: str = "database.db") -> Flask:
             return jsonify({'error': 'Unauthorized'}), 401
         return dashboard.api_dashboard_trend(app.config['DATABASE'])
 
+    # GLOBAL CATALOG
+    
+
 
     # PLATFORM INFO
     @app.route('/api/platform/overview')
@@ -2001,6 +2004,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         return platform.api_platform_overview(app.config['DATABASE'])
 
     return app
+
+
 
 if __name__ == '__main__':
     # When executed directly, run the app on localhost for development

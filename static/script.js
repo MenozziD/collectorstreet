@@ -676,11 +676,6 @@ function openModal(item = null) {
         itemDescription.value = item.description || '';
         itemLanguage.value = item.language || '';
         itemCategory.value = item.category || '';
-        if (item && item.market_params) {
-            renderMarketParamsFields();
-        } else {
-            renderMarketParamsFields();
-        }
         purchasePrice.value = item.purchase_price !== null && item.purchase_price !== undefined ? item.purchase_price : '';
         purchaseDate.value = item.purchase_date || '';
         salePrice.value = item.sale_price !== null && item.sale_price !== undefined ? item.sale_price : '';
@@ -705,6 +700,12 @@ function openModal(item = null) {
         // pulisci input
         const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
         const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
+        // Render MarketParamsFields
+        if (item && item.market_params) {
+            renderMarketParamsFields(Array.isArray(item?.market_params) ? [...item.market_params] : []);
+        } else {
+            renderMarketParamsFields();
+        }
     } else {
         modalTitle.textContent = 'Nuovo Item';
         toggleAdvancedBtn.style="display: None";

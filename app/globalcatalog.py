@@ -3,6 +3,19 @@ from datetime import datetime, date
 import json
 
 class gc():
+
+    IDENT_BACKEND_MAP = {
+        'serial':          {'json_keys': ['serial', 'serial_number'], 'ckey': 'serial'},
+        'ean':             {'json_keys': ['ean', 'barcode', 'upc'],    'ckey': 'ean'},
+        'lego_set':        {'json_keys': ['set_number'],               'ckey': 'lego'},
+        'pc_id':           {'json_keys': ['pricecharting_id'],         'ckey': 'pc'},
+        'discogs_id':      {'json_keys': ['discogs_release_id', 'discogs_master_id'], 'ckey': 'discogs'},
+        'tcgplayer_id':    {'json_keys': ['tcgplayer_id', 'justtcg_id'], 'ckey': 'tcg'},
+        'stockx_slug':     {'json_keys': ['stockx_slug', 'stockx_urlKey'], 'ckey': 'stockx'},
+    }
+
+    
+
     def ensure_global_by_identifiers(market_params: str, category: str, hint_name: str = None) -> int:
         idmap = hlp.normalize_identifiers(category, market_params)
         catalog_key = hlp.preferred_catalog_key(category, idmap)

@@ -947,7 +947,7 @@ body.theme-sakura .chip, body.theme-sakura .tag-pill { background:#fff; border-c
 
 /* 2 colonne fisse, responsive su mobile */
 #marketParamsFields.mp-grid{
-  display: grid;
+  display: flex;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 16px; /* riga x colonna */
 }

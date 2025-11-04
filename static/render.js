@@ -65,10 +65,50 @@ const CATEGORY_ALIASES = {
   'tradingcards': 'tradingcard'
 };
 
-function renderMarketParamsFields(){
-    const wrap = document.getElementById('marketParamsFields');
-    if (!wrap) return;
+// Identifiers supportati nel lookup AUTO (label → type / backend key)
+const IDENT_OPTIONS = [
+  { value: 'serial',           label: 'Serial' },
+  { value: 'ean',              label: 'EAN/UPC' },
+  { value: 'lego_set',         label: 'LEGO Set' },
+  { value: 'pc_id',            label: 'PriceCharting ID' },
+  { value: 'discogs_id',       label: 'Discogs Release ID' },
+  { value: 'tcgplayer_id',     label: 'TCGplayer ID' },
+  { value: 'stockx_slug',      label: 'StockX Slug' }
+];
 
+/**
+ * Rende i campi di market params in due modalità:
+ *  - MANUAL: mostra tutti i campi (comportamento attuale)
+ *  - AUTO: mostra select "tipo seriale" + input "valore" + bottone "Conferma"
+ *
+ * @param {HTMLElement} container El. DOM dove renderizzare
+ * @param {string} category Categoria corrente (può essere usata dal renderer manuale)
+ * @param {object} currentMarketParams Oggetto esistente dei market params
+ */
+function renderMarketParamsFields(currentMarketParams = {}) {
+  const container = document.getElementById('marketParamsFields');
+  const category = normalizeCategory(document.getElementById('itemCategory').value);
+  container.innerHTML = '';
+
+  // Header modalità
+  const modeWrap = document.createElement('div');
+  modeWrap.className = 'gc-mode-switch';
+  modeWrap.innerHTML = `
+    <div class="hstack" style="gap:12px; align-items:center; margin-bottom:8px;">
+      <span class="muted">Modalità parametri:</span>
+      <label><input type="radio" name="gc_mode" value="manual" checked> Manual</label>
+      <label><input type="radio" name="gc_mode" value="auto"> Auto</label>
+    </div>
+    <div id="gcModeArea"></div>
+  `;
+  container.appendChild(modeWrap);
+
+  const modeArea = modeWrap.querySelector('#gcModeArea');
+
+  function renderManual() {
+    modeArea.innerHTML = '';
+    const wrap = document.createElement('div');
+    
     const catRaw = document.getElementById('itemCategory')?.value || '';
     const catKey = normalizeCategory(catRaw);
     const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
@@ -98,9 +138,132 @@ function renderMarketParamsFields(){
         input.value = val || '';
 
         div.append(label, input);
-        wrap.appendChild(div);    
+        wrap.appendChild(div);      
     });
+    modeArea.appendChild(wrap);
+    
+    // modeArea.innerHTML = '';
+    // // *** Usa il renderer esistente (comportamento attuale) ***
+    // // Se hai già una funzione che costruisce i campi in base a category/schema, richiamala qui.
+    // // Esempio:
+    // if (typeof renderManualMarketParamsSection === 'function') {
+    //   renderManualMarketParamsSection(modeArea, category, currentMarketParams);
+    // } else {
+    //   // Fallback minimo: mostra JSON editabile (per non rompere il flusso se manca la funzione)
+    //   modeArea.innerHTML = `
+    //     <label class="muted">Parametri (JSON):</label>
+    //     <textarea id="marketParamsJson" rows="6" style="width:100%">${JSON.stringify(currentMarketParams || {}, null, 2)}</textarea>
+    //   `;
+    // }
+  }
+
+  function renderAuto() {
+    modeArea.innerHTML = '';
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="vstack" style="gap:8px;">
+        <div class="hstack" style="gap:8px;">
+          <label class="muted" style="min-width:160px;">Tipo identificatore</label>
+          <select id="gcIdentType" style="flex:1;"></select>
+        </div>
+        <div class="hstack" style="gap:8px;">
+          <label class="muted" style="min-width:160px;">Valore</label>
+          <input id="gcIdentValue" type="text" style="flex:1;" placeholder="Inserisci il valore esatto">
+        </div>
+        <div class="hstack" style="gap:8px; justify-content:flex-start;">
+          <button type="button" class="btn" id="gcAutoConfirm">Conferma</button>
+          <span id="gcAutoMsg" class="muted"></span>
+        </div>
+      </div>
+    `;
+    modeArea.appendChild(wrap);
+
+    // Popola select
+    const sel = wrap.querySelector('#gcIdentType');
+    IDENT_OPTIONS.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt.value; o.textContent = opt.label;
+      sel.appendChild(o);
+    });
+
+    // Conferma → lookup su backend
+    wrap.querySelector('#gcAutoConfirm').addEventListener('click', async () => {
+      const type = sel.value;
+      const value = (wrap.querySelector('#gcIdentValue').value || '').trim();
+      const msg = wrap.querySelector('#gcAutoMsg');
+      msg.textContent = '';
+      msg.style.color = '';
+
+      if (!type || !value) {
+        msg.textContent = 'Seleziona un tipo e inserisci un valore.'; msg.style.color = 'red';
+        return;
+      }
+
+      try {
+        const r = await fetch(`/api/global-catalog/lookup?type=${encodeURIComponent(type)}&value=${encodeURIComponent(value)}`);
+        const jsn = await r.json();
+        if (jsn && jsn.match && jsn.global) {
+          // Abbiamo un match → salviamo in hidden inputs per submit
+          // 1) settiamo category UI (se hai un select per categoria)
+          const catSel = document.getElementById('itemCategory');
+          if (catSel && jsn.global.category) {
+            catSel.value = jsn.global.category;
+            // Eventuale trigger per ridisegnare campi manuali se l’utente passa a manual dopo
+            catSel.dispatchEvent(new Event('change'));
+          }
+          // 2) teniamo memoria dell’aggancio:
+          ensureHidden('gcLinkedGlobalId').value = jsn.global.id;
+          ensureHidden('gcModeSelected').value = 'auto';
+          // 3) Carichiamo i marketParams dal GC nel form (in memoria; i campi restano nascosti in AUTO)
+          window.__autoResolvedMarketParams = jsn.global.market_params || {};
+          msg.textContent = `Trovato: ${jsn.global.canonical_name} (ID ${jsn.global.id}). Verranno usati i parametri collegati.`;
+          msg.style.color = 'green';
+        } else {
+          ensureHidden('gcLinkedGlobalId').value = '';
+          window.__autoResolvedMarketParams = null;
+          ensureHidden('gcModeSelected').value = 'auto';
+          msg.textContent = 'Nessun match trovato. Passa alla modalità MANUAL e inserisci i dati: probabilmente va aggiunto al catalogo.';
+          msg.style.color = 'red';
+        }
+      } catch (e) {
+        ensureHidden('gcLinkedGlobalId').value = '';
+        window.__autoResolvedMarketParams = null;
+        ensureHidden('gcModeSelected').value = 'auto';
+        msg.textContent = 'Errore di lookup. Riprova o usa la modalità MANUAL.';
+        msg.style.color = 'red';
+      }
+    });
+  }
+
+  // utility per hidden fields necessari al submit
+  function ensureHidden(id) {
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('input');
+      el.type = 'hidden';
+      el.id = id;
+      el.name = id;
+      container.appendChild(el);
+    }
+    return el;
+  }
+
+  // Gestione toggle
+  const radios = modeWrap.querySelectorAll('input[name="gc_mode"]');
+  radios.forEach(r => r.addEventListener('change', () => {
+    if (modeWrap.querySelector('input[name="gc_mode"]:checked').value === 'auto') renderAuto();
+    else renderManual();
+    // Aggiorno hidden gcModeSelected
+    ensureHidden('gcModeSelected').value = modeWrap.querySelector('input[name="gc_mode"]:checked').value;
+  }));
+
+  // Render iniziale (manual come da requisito)
+  renderManual();
+  ensureHidden('gcModeSelected').value = 'manual';
+  ensureHidden('gcLinkedGlobalId'); // creato, vuoto
 }
+
 
 function renderLinks(list, containerId){
   const listEl = document.getElementById(containerId);
