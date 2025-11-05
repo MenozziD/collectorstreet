@@ -437,7 +437,6 @@ function collectMarketParams(){
   return obj;
 }
 
-
 function renderViewModal(item){
     
     const m = document.getElementById('viewItemModal');

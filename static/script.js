@@ -159,9 +159,11 @@ function initApp() {
     // Gestione submit del form dell'item (creazione/aggiornamento)
     itemForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const modalTitle = document.getElementById('modalTitle');
         let res = await saveItem();
         if (res.ok) {
-            try { linkToGlobalCatalog(); } catch {};
+            if (modalTitle.textContent != 'Nuovo Item')
+                try { linkToGlobalCatalog(); } catch {};
             closeModal();
             clearItemForm();
             fetchItems(USER_ITEM_VIEW_MODE,USER_REF_CURRENCY);
