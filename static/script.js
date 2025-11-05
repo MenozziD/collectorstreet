@@ -1,6 +1,6 @@
 // import the variables and function from module.js
 import { renderEditModal, renderViewModal, renderMarketParamsFields, renderLinks, collectMarketParams, updateRefCurrencyLabel,initPrice, setHint, clearItemForm, fmtMoney, closeModal } from './render.js';
-import { saveItem,fetchItems,setUser } from './item.js';
+import { saveItem,fetchItems,setUser, linkToGlobalCatalog } from './item.js';
 
 let USER_ITEM_VIEW_MODE = 'standard';
 let USER_REF_CURRENCY = null;
@@ -161,6 +161,7 @@ function initApp() {
         e.preventDefault();
         let res = await saveItem();
         if (res.ok) {
+            try { linkToGlobalCatalog(); } catch {};
             closeModal();
             clearItemForm();
             fetchItems(USER_ITEM_VIEW_MODE,USER_REF_CURRENCY);
@@ -547,15 +548,6 @@ function drawHistoryChart(rows){
   // labels
   ctx.fillStyle = '#64748b'; ctx.font = '11px sans-serif';
   ctx.fillText(yMin.toFixed(2), 4, yScale(yMin)); ctx.fillText(yMax.toFixed(2), 4, yScale(yMax));
-}
-
-function parseMarketParams(mp){
-  try {
-    if (!mp) return {};
-    if (typeof mp === 'string') return JSON.parse(mp);
-    if (typeof mp === 'object') return mp;
-  } catch(e){}
-  return {};
 }
 
 // ===== Global Catalog: Info Links =====

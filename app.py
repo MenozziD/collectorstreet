@@ -1806,7 +1806,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         category = data.get('category') or ''
         market_params = json.dumps(data.get('market_params') or {}, ensure_ascii=False)
         hint_name = data.get('hint_name') or None
-        gid = gc.ensure_global_by_identifiers(market_params, category, hint_name)
+        gid = gc.ensure_global_by_identifiers(app.config['DATABASE'],market_params, category, hint_name)
         return jsonify({'global_id': gid}), 200
 
     @app.route('/api/global-catalog/<int:gid>/refresh', methods=['POST'])

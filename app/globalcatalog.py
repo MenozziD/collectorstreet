@@ -16,11 +16,12 @@ class gc():
 
     
 
-    def ensure_global_by_identifiers(market_params: str, category: str, hint_name: str = None) -> int:
+    def ensure_global_by_identifiers(db_string, market_params: str, category: str, hint_name: str = None) -> int:
         idmap = hlp.normalize_identifiers(category, market_params)
         catalog_key = hlp.preferred_catalog_key(category, idmap)
 
-        conn = db.get_db_connection(); cur = conn.cursor()
+        conn = db.get_db_connection(db_string)
+        cur = conn.cursor()
         # Cerca per catalog_key
         cur.execute("SELECT id FROM global_catalog WHERE catalog_key = ? LIMIT 1", (catalog_key,))
         row = cur.fetchone()

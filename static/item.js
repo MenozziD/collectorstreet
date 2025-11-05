@@ -11,6 +11,74 @@ const categoryIcons = {
     'sticker': 'sticker.svg',
 };
 
+// Schema dei parametri per categoria
+const MARKET_HINTS_SCHEMA = {
+  'tradingcard': [
+    {key:'game', label:'Gioco', placeholder:'es. Pokémon / MTG', tip:'Gioco TCG (pokemon, mtg, yugioh, ...)' },
+    {key:'set_name', label:'Set', placeholder:'es. Base Set', tip:'Nome set/espansione' },
+    {key:'number', label:'Numero', placeholder:'es. 4/102', tip:'Numero carta' },
+    {key:'language', label:'Lingua', placeholder:'es. ITA/ENG/JP', tip:'Lingua' },
+    {key:'printing', label:'Finitura', placeholder:'Normal / Foil', tip:'Normal / Foil / 1st Edition / Unlimited' },
+    {key:'tcgplayer_id', label:'TCGplayer ID', placeholder:'es. 123456', tip:'ID diretto per lookup preciso' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
+  ],
+  'videogame': [
+    {key:'platform', label:'Piattaforma', placeholder:'es. PS2, SNES', tip:'Piattaforma/console' },
+    {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' },
+    {key:'edition', label:'Edizione', placeholder:'Standard / Limited', tip:'Edizione o variant' },
+    {key:'pricecharting_id', label:'PriceCharting ID', placeholder:'es. 12345', tip:'ID diretto se noto' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
+  ],
+  'console': [
+    {key:'platform', label:'Piattaforma', placeholder:'es. Nintendo Switch', tip:'Console piattaforma' },
+    {key:'region', label:'Regione', placeholder:'PAL / NTSC-U / NTSC-J', tip:'Area/Regione' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
+  ],
+  'sneakers': [
+    {key:'brand', label:'Brand', placeholder:'Nike / Adidas', tip:'Marca' },
+    {key:'model', label:'Modello', placeholder:'es. Dunk Low', tip:'Modello' },
+    {key:'colorway', label:'Colorway', placeholder:'es. Panda', tip:'Colorway' },
+    {key:'sku', label:'SKU', placeholder:'es. DD1391-100', tip:'Codice prodotto' },
+    {key:'size', label:'Taglia', placeholder:'US 9 / EU 42.5', tip:'Taglia' },
+    {key:'stockx_url_key', label:'StockX URL Key', placeholder:'es. nike-dunk-low-retro-white-black', tip:'Slug univoco' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
+  ],
+  'vinyl': [
+    {key:'artist', label:'Artista', placeholder:'es. Pink Floyd', tip:'Artista' },
+    {key:'album', label:'Album', placeholder:'es. The Dark Side...', tip:'Titolo' },
+    {key:'year', label:'Anno', placeholder:'es. 1973', tip:'Anno uscita' },
+    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 1234567', tip:'ID release Discogs' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
+  ],
+  'cd': [
+    {key:'artist', label:'Artista', placeholder:'es. Daft Punk', tip:'Artista' },
+    {key:'album', label:'Album', placeholder:'es. Discovery', tip:'Titolo' },
+    {key:'year', label:'Anno', placeholder:'es. 2001', tip:'Anno uscita' },
+    {key:'discogs_release_id', label:'Discogs Release ID', placeholder:'es. 7654321', tip:'ID release Discogs' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
+  ],
+  'lego': [
+    {key:'set_number', label:'Set Number', placeholder:'es. 75336', tip:'Codice set LEGO' },
+    {key:'theme', label:'Tema', placeholder:'es. Star Wars', tip:'Tema' },
+    {key:'year', label:'Anno', placeholder:'es. 2022', tip:'Anno uscita' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
+  ],
+  'default': [
+    {key:'brand', label:'Brand', placeholder:'', tip:'Marca' },
+    {key:'model', label:'Modello', placeholder:'', tip:'Modello' },
+    {key:'serial_number', label:'Serial Number', placeholder:'es. 123456', tip:'Codice univoco del prodotto SKU/HAC/CTR/WUP/DMG/SLES/PPSA'}
+  ]
+};
+
+const CATEGORY_ALIASES = {
+  'snickers': 'sneakers',
+  'shoes': 'sneakers',
+  'vynil': 'vinyl',
+  'videogames': 'videogame',
+  'tradingcards': 'tradingcard'
+};
+
+
 const languageFlags = {
   'ITA': 'https://flagcdn.com/w20/it.png',
   'ENG': 'https://flagcdn.com/w20/gb.png',  // o us se preferisci
@@ -27,6 +95,15 @@ function setUser(pUSER_ITEM_VIEW_MODE,pUSER_REF_CURRENCY)
 {
     USER_ITEM_VIEW_MODE = pUSER_ITEM_VIEW_MODE;
     USER_REF_CURRENCY = pUSER_REF_CURRENCY;
+}
+
+function normalizeCategory(cat){
+  const k = (cat || '').toLowerCase().trim();
+  if (MARKET_HINTS_SCHEMA[k]) return k;
+  if (CATEGORY_ALIASES[k] && MARKET_HINTS_SCHEMA[CATEGORY_ALIASES[k]]) {
+    return CATEGORY_ALIASES[k];
+  }
+  return 'default';
 }
 
 async function saveItem() {
@@ -118,6 +195,53 @@ async function saveItem() {
         }
         return res;
 }
+
+async function linkToGlobalCatalog(){
+  const itemId = document.getElementById('itemId')?.value;
+  const category = document.getElementById('itemCategory')?.value || '';
+  const mp = collectMarketParams();
+  const hintName = document.getElementById('itemName')?.value || '';
+  try{
+    const r = await fetch('/api/global-catalog/ensure-or-resolve', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({category, market_params: mp, hint_name: hintName})
+    });
+    const jsn = await r.json();
+    if (jsn.global_id){
+      // salva sull'item
+      if (itemId){
+        await fetch(`/api/items/${itemId}`, {
+          method:'PUT', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({global_id: jsn.global_id})
+        });
+      }
+      alert(`Collegato al Catalogo Globale (ID ${jsn.global_id}).`);
+    } else {
+      alert('Impossibile collegare al Catalogo Globale.');
+    }
+  }catch(e){ alert('Errore collegamento catalogo.'); }
+}
+
+function collectMarketParams(){
+  const catKey = normalizeCategory(document.getElementById('itemCategory').value);
+  const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
+  const obj = {};
+  schema.forEach(f => {
+    const el = document.getElementById('mp_' + f.key);
+    if (el && el.value && el.value.trim() !== '') obj[f.key] = el.value.trim();
+  });
+  return obj;
+}
+
+function parseMarketParams(mp){
+  try {
+    if (!mp) return {};
+    if (typeof mp === 'string') return JSON.parse(mp);
+    if (typeof mp === 'object') return mp;
+  } catch(e){}
+  return {};
+}
+
 
 async function fetchItems() {
     const searchInput = document.getElementById('searchInput');
@@ -380,4 +504,4 @@ function populateCategories(items) {
 }
 
 // exporting variables and function
-export {saveItem,fetchItems,setUser};
+export {saveItem,fetchItems,setUser,linkToGlobalCatalog, MARKET_HINTS_SCHEMA, normalizeCategory};
