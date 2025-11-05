@@ -1,43 +1,15 @@
 // import the variables and function from module.js
-import { renderMarketParamsFields, renderLinks, collectMarketParams } from './render.js';
-
+import { renderEditModal, renderViewModal, renderMarketParamsFields, renderLinks, collectMarketParams, updateRefCurrencyLabel,initPrice, setHint, clearItemForm, fmtMoney, closeModal } from './render.js';
+import { saveItem,fetchItems,setUser } from './item.js';
 
 let USER_ITEM_VIEW_MODE = 'standard';
+let USER_REF_CURRENCY = null;
 // NEW: aggiungi subito dopo
 (function applyViewModeClass(){
   const root = document.documentElement;
   root.classList.toggle('compact-mode', USER_ITEM_VIEW_MODE === 'compact');
 })();
 
-
-// script.js - gestisce login e interazione con l'applicazione
-// Global variable to store the current user's reference currency
-let USER_REF_CURRENCY = null;
-function updateRefCurrencyLabel(){
-  const el = document.getElementById('refCurrencyLabel');
-  if (el) { el.textContent = USER_REF_CURRENCY || 'EUR'; }
-}
-
-
-// Mappatura categorie -> icone. Le chiavi sono in minuscolo.
-const categoryIcons = {
-    'videogames': 'gamepad.svg',
-    'console': 'tv.svg',
-    'action figure': 'robot.svg',
-    'trading card': 'tradingcard.svg',
-    'cd': 'cd.svg',
-    'vynil': 'vynil.svg',
-    'other': 'other.svg',
-    'sticker': 'sticker.svg',
-};
-
-const languageFlags = {
-  'ITA': 'https://flagcdn.com/w20/it.png',
-  'ENG': 'https://flagcdn.com/w20/gb.png',  // o us se preferisci
-  'JAP': 'https://flagcdn.com/w20/jp.png',
-  'KOR': 'https://flagcdn.com/w20/kr.png',
-  'CHS': 'https://flagcdn.com/w20/cn.png'
-};
 
 document.addEventListener('DOMContentLoaded', () => {
     // Se è presente il form di login, gestisci la login; altrimenti inizializza l'applicazione
@@ -92,7 +64,8 @@ async function fetchUserInfo() {
             const data = await res.json();
             USER_REF_CURRENCY = data.ref_currency || null;
             USER_ITEM_VIEW_MODE = (data.item_view_mode || 'standard').toLowerCase();
-            updateRefCurrencyLabel();
+            updateRefCurrencyLabel(USER_REF_CURRENCY);
+            setUser(USER_ITEM_VIEW_MODE,USER_REF_CURRENCY);
         }
     } catch (err) {
         console.error('Errore recupero utente:', err);
@@ -126,7 +99,6 @@ function initApp() {
     categoryFilter.addEventListener('change', () => fetchItems());
     tagFilter.addEventListener('input', () => fetchItems());
 
-    
     // Toggle avanzato nella modale
     const toggleAdvancedBtn = document.getElementById('toggleAdvancedBtn');
     const modalContentEl = document.querySelector('#itemModal .modal-content');
@@ -146,19 +118,13 @@ function initApp() {
     });
     
     // Aggiorna indicatore valuta di riferimento e conversione
-    updateRefCurrencyLabel();
-    document.getElementById('purchasePrice')?.addEventListener('input', () => { validateFields(); updateConversion(); });
-    document.getElementById('currency')?.addEventListener('change', () => { validateFields(); updateConversion(); });
-    document.getElementById('purchaseDate')?.addEventListener('change', validateFields);
-    document.getElementById('salePrice')?.addEventListener('input', validateFields);
-    document.getElementById('saleDate')?.addEventListener('change', validateFields);
-    document.getElementById('quantity')?.addEventListener('input', validateFields);
+    initPrice(USER_REF_CURRENCY);
 
-// Eventi bottoni
+    // Eventi bottoni
     addItemBtn?.addEventListener('click', () => {
         clearItemForm();
         modalTitle.textContent = 'Nuovo Item';
-        openModal();
+        renderEditModal(USER_REF_CURRENCY);
     });
     exportCsvBtn?.addEventListener('click', () => {
         const params = new URLSearchParams();
@@ -178,6 +144,7 @@ function initApp() {
         }
         window.location.href = '/';
     });
+
     modalClose.addEventListener('click', closeModal);
     // Chiusura modale su click fuori dalla finestra
     window.addEventListener('click', (event) => {
@@ -192,97 +159,15 @@ function initApp() {
     // Gestione submit del form dell'item (creazione/aggiornamento)
     itemForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const id = document.getElementById('itemId').value;
-        const name = document.getElementById('itemName').value.trim();
-        const description = document.getElementById('itemDescription').value.trim();
-        const language = document.getElementById('itemLanguage').value;
-        const category = document.getElementById('itemCategory').value.trim();
-        const purchasePrice = document.getElementById('purchasePrice').value;
-        const purchaseDate = document.getElementById('purchaseDate').value;
-        const salePrice = document.getElementById('salePrice').value;
-        const saleDate = document.getElementById('saleDate').value;
-        const tags = document.getElementById('itemTags').value.trim();
-        const quantity = document.getElementById('quantity').value;
-        const conditionVal = document.getElementById('condition').value;
-        const currency = document.getElementById('currency').value;
-        const imageInput = document.getElementById('image');
-        try {
-            let res;
-            if (id) {
-                // Aggiornamento con FormData (può contenere immagine)
-                const formData = new FormData();
-                formData.append('name', name);
-                formData.append('description', description);
-                formData.append('language', language);
-                formData.append('category', category);
-                formData.append('purchase_price', purchasePrice);
-                formData.append('purchase_date', purchaseDate);
-                formData.append('sale_price', salePrice);
-                formData.append('sale_date', saleDate);
-                formData.append('marketplace_links', JSON.stringify(stateMarketplaceLinks));
-                formData.append('info_links', JSON.stringify(stateInfoLinks));
-                formData.append('tags', tags);
-                formData.append('quantity', quantity);
-                formData.append('condition', conditionVal);
-                formData.append('currency', currency);
-                // Prezzo in valuta di riferimento può essere opzionale; aggiungilo comunque
-                const refVal = document.getElementById('purchasePriceRef').value;
-                formData.append('purchase_price_curr_ref', refVal);
-                try{
-                    const mp = collectMarketParams();
-                    if (Object.keys(mp).length) formData.append('market_params', JSON.stringify(mp));
-                }
-                catch(e)
-                {}
-                
-                if (imageInput.files && imageInput.files[0])
-                {
-                    formData.append('image', imageInput.files[0]);
-                }
-                
-                res = await fetch(`/api/items/${id}`, {
-                    method: 'PUT',
-                    body: formData
-                });
-            } else {
-                // Creazione tramite JSON (senza immagine)
-                const payload = {
-                    name,
-                    description,
-                    language,
-                    category,
-                    purchase_price: purchasePrice ? parseFloat(purchasePrice) : null,
-                    purchase_date: purchaseDate || null,
-                    sale_price: salePrice ? parseFloat(salePrice) : null,
-                    sale_date: saleDate || null,
-                    tags,
-                    quantity: quantity ? parseInt(quantity) : null,
-                    condition: conditionVal || null,
-                    currency
-                };
-                // Include prezzo in valuta di riferimento se presente
-                const refValJson = document.getElementById('purchasePriceRef').value;
-                payload.purchase_price_curr_ref = refValJson ? parseFloat(refValJson) : null;
-                const mp = collectMarketParams();
-                if (Object.keys(mp).length) payload.market_params = mp;
-                res = await fetch('/api/items', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            }
-            if (res.ok) {
-                closeModal();
-                clearItemForm();
-                fetchItems();
-            } else {
-                let data;
-                try { data = await res.json(); } catch { data = {}; }
-                alert(data.error || 'Errore durante il salvataggio');
-            }
-        } catch (err) {
-            console.error(err);
-            alert('Impossibile connettersi al server');
+        let res = await saveItem();
+        if (res.ok) {
+            closeModal();
+            clearItemForm();
+            fetchItems(USER_ITEM_VIEW_MODE,USER_REF_CURRENCY);
+        } else {
+            let data;
+            try { data = await res.json(); } catch { data = {}; }
+            alert(data.error || 'Errore durante il salvataggio');
         }
     });
 
@@ -375,376 +260,6 @@ async function updateProfileStats() {
     } catch (err) {
         console.error('Errore aggiornamento statistiche:', err);
     }
-}
-
-async function fetchItems() {
-    const searchInput = document.getElementById('searchInput');
-    const categoryFilter = document.getElementById('categoryFilter');
-    const tagFilter = document.getElementById('tagFilter');
-    const params = new URLSearchParams();
-    if (searchInput.value.trim()) params.append('q', searchInput.value.trim());
-    if (categoryFilter.value) params.append('category', categoryFilter.value);
-    if (tagFilter.value.trim()) params.append('tags', tagFilter.value.trim());
-    try {
-        const res = await fetch(`/api/items?${params.toString()}`);
-        if (res.ok) {
-            const items = await res.json();
-            renderItems(items);
-            populateCategories(items);
-        } else if (res.status === 401) {
-            // Non autorizzato, forza logout
-            window.location.href = '/';
-        }
-    } catch (err) {
-        console.error(err);
-    }
-}
-
-function renderItems(items) {
-    const container = document.getElementById('itemsContainer');
-    container.innerHTML = '';
-    if (!items || items.length === 0) {
-        const emptyMsg = document.createElement('p');
-        emptyMsg.textContent = 'Nessun item trovato';
-        container.appendChild(emptyMsg);
-        return;
-    }
-    items.forEach((item) => {
-        const card = document.createElement('div');
-        card.className = 'item-card';
-        // Inserisci immagine se presente
-        if (item.image_path) {
-            const img = document.createElement('img');
-            img.className = 'item-image';
-            img.src = `/static/${item.image_path}`;
-            img.alt = item.name;
-            card.appendChild(img);
-        }
-        // Inserisci icona categoria e titolo
-        const title = document.createElement('h3');
-        
-        // Contenitore per icona e testo
-        const titleWrapper = document.createElement('div');
-        titleWrapper.className = 'title-wrapper';
-        
-        // Icona categoria
-        const icon = document.createElement('img');
-        icon.className = 'icon';
-        if (item.category) {
-            const key = item.category.toLowerCase();
-            const filename = categoryIcons[key] || 'gamepad.svg';
-            icon.src = `/static/icons/${filename}`;
-        } else {
-            icon.src = `/static/icons/gamepad.svg`;
-        }
-        icon.alt = 'Icona categoria';
-        
-        // Icona Lingua
-        const flagImg = document.createElement('img');
-        flagImg.className = 'icon-languageflag';
-        if (item.language && languageFlags[item.language]) {
-            flagImg.src = languageFlags[item.language];
-            flagImg.alt = item.language;
-            flagImg.className = 'icon';
-            flagImg.className = 'language-flag';
-        }
-        
-        // Contenitore Categoria e Lancguage icon
-        const iconlanguageWrapper = document.createElement('div');
-        // iconlanguageWrapper.id = "iconlanguage-div";
-        iconlanguageWrapper.class = "container";
-        iconlanguageWrapper.appendChild(icon);
-        iconlanguageWrapper.appendChild(flagImg);
-
-        titleWrapper.appendChild(iconlanguageWrapper);
-        const nameSpan = document.createElement('span');
-        nameSpan.id = "nameSpan";
-        nameSpan.textContent = item.name;
-        nameSpan.style.marginLeft = '6px';
-        nameSpan.style.marginRight = '10px';
-        titleWrapper.appendChild(nameSpan);
-
-        card.appendChild(titleWrapper);
-        if (USER_ITEM_VIEW_MODE !== 'compact') {
-            if (item.description) {
-                const desc = document.createElement('p');
-                desc.id = "desc-field";
-                desc.textContent = item.description;
-                card.appendChild(desc);
-            }
-        }
-        if (item.category) {
-            const cat = document.createElement('p');
-            cat.innerHTML = `<strong>Categoria:</strong> ${item.category}`;
-            card.appendChild(cat);
-        }
-        if (USER_ITEM_VIEW_MODE !== 'compact') {
-            if (item.purchase_price !== null && item.purchase_price !== undefined) {
-                const pp = document.createElement('p');
-                const currency = item.currency || '';
-                pp.innerHTML = `<strong>Prezzo Acquisto:</strong> ${item.purchase_price} ${currency}`;
-                card.appendChild(pp);
-            }
-            // Mostra anche il prezzo in valuta di riferimento se disponibile e se l'utente ha impostato una valuta di riferimento
-            if (USER_ITEM_VIEW_MODE !== 'compact') {
-                if (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined && USER_REF_CURRENCY) {
-                    const ppRef = document.createElement('p');
-                    ppRef.innerHTML = `<strong>Prezzo Acquisto (Ref):</strong> ${item.purchase_price_curr_ref.toFixed(2)} ${USER_REF_CURRENCY}`;
-                    card.appendChild(ppRef);
-                }
-            }
-        }
-        if (item.purchase_date) {
-            const pd = document.createElement('p');
-            pd.innerHTML = `<strong>Data Acquisto:</strong> ${item.purchase_date}`;
-            card.appendChild(pd);
-        }
-        if (USER_ITEM_VIEW_MODE !== 'compact') {
-            if (item.sale_price !== null && item.sale_price !== undefined) {
-                const sp = document.createElement('p');
-                const currency = item.currency || '';
-                sp.innerHTML = `<strong>Prezzo Vendita:</strong> ${item.sale_price} ${currency}`;
-                card.appendChild(sp);
-            }
-        }
-        if (USER_ITEM_VIEW_MODE !== 'compact') {
-            if (item.sale_date) {
-                const sd = document.createElement('p');
-                sd.innerHTML = `<strong>Data Vendita:</strong> ${item.sale_date}`;
-                card.appendChild(sd);
-            }
-        }
-        if (item.quantity !== null && item.quantity !== undefined) {
-            const qty = document.createElement('p');
-            qty.innerHTML = `<strong>Quantità:</strong> ${item.quantity}`;
-            card.appendChild(qty);
-        }
-        if (item.condition) {
-            const cond = document.createElement('p');
-            cond.innerHTML = `<strong>Condizione:</strong> ${item.condition}`;
-            card.appendChild(cond);
-        }
-        if (item.time_in_collection !== null && item.time_in_collection !== undefined) {
-            const tic = document.createElement('p');
-            tic.innerHTML = `<strong>Giorni in collezione:</strong> ${item.time_in_collection}`;
-            card.appendChild(tic);
-        }
-        if (USER_ITEM_VIEW_MODE !== 'compact') {
-            if (item.roi !== null && item.roi !== undefined) {
-                const roi = document.createElement('p');
-                const perc = (item.roi * 100).toFixed(2);
-                roi.innerHTML = `<strong>ROI:</strong> ${perc}%`;
-                card.appendChild(roi);
-            }
-        }
-        /* Valore stimato e range di mercato
-        if (item.fair_value !== null && item.fair_value !== undefined) {
-            const fv = document.createElement('p');
-            const cur = item.currency || '';
-            fv.innerHTML = `<strong>Valore stimato:</strong> ${item.fair_value.toFixed(2)} ${cur}`;
-            card.appendChild(fv);
-            if (item.price_p05 !== null && item.price_p95 !== null) {
-                const range = document.createElement('p');
-                range.innerHTML = `<strong>Range:</strong> ${item.price_p05.toFixed(2)} - ${item.price_p95.toFixed(2)} ${cur}`;
-                card.appendChild(range);
-            }
-        }
-        */    
-        if (item.marketplace_link) {
-            const link = document.createElement('a');
-            link.href = item.marketplace_link;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            link.textContent = 'Vedi su marketplace';
-            card.appendChild(link);
-        }
-        // Tags
-        if (item.tags) {
-            const tagsDiv = document.createElement('div');
-            tagsDiv.className = 'tags';
-            let tags = item.tags.split('#').map(t => t.trim()).filter(Boolean);
-            // In modalità compatta, limita ai primi 3
-            if (USER_ITEM_VIEW_MODE === 'compact') tags = tags.slice(0, 3);
-            tags.forEach(tag => {
-                const span = document.createElement('span');
-                span.className = 'tag';
-                span.textContent = tag;
-                tagsDiv.appendChild(span);
-            });
-            card.appendChild(tagsDiv);
-        }
-        // Azioni
-        const actions = document.createElement('div');
-        actions.className = 'actions';
-        const editBtn = document.createElement('button');
-        editBtn.className = 'edit';
-        editBtn.textContent = 'Modifica';
-        editBtn.addEventListener('click', () => {
-            openModal(item);
-        });
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'delete';
-        deleteBtn.textContent = 'Elimina';
-        deleteBtn.addEventListener('click', async () => {
-            if (confirm('Sei sicuro di voler eliminare questo item?')) {
-                try {
-                    const res = await fetch(`/api/items/${item.id}`, { method: 'DELETE' });
-                    if (res.ok) {
-                        fetchItems();
-                    } else {
-                        alert('Errore durante la cancellazione');
-                    }
-                } catch (err) {
-                    console.error(err);
-                    alert('Impossibile connettersi al server');
-                }
-            }
-        });
-        const viewBtn = document.createElement('button');
-        viewBtn.className = 'action-btn';
-        viewBtn.textContent = 'Visualizza';
-        viewBtn.addEventListener('click', () => openViewModal(item));
-        actions.appendChild(viewBtn);
-        actions.appendChild(editBtn);
-        actions.appendChild(deleteBtn);
-        card.appendChild(actions);
-        container.appendChild(card);
-    });
-}
-
-function populateCategories(items) {
-    const select = document.getElementById('categoryFilter');
-    const current = select.value;
-    // Ottieni insieme di categorie uniche
-    const categories = new Set();
-    items.forEach(item => {
-        if (item.category) {
-            categories.add(item.category);
-        }
-    });
-    // Svuota l'elenco mantenendo l'opzione 'tutte'
-    select.innerHTML = '';
-    const defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = 'Tutte le categorie';
-    select.appendChild(defaultOption);
-    categories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        if (cat === current) option.selected = true;
-        select.appendChild(option);
-    });
-}
-
-function openModal(item = null) {
-    
-  // reset label/hints
-    updateRefCurrencyLabel();
-    setHint('purchasePriceHint',''); setHint('purchaseDateHint',''); setHint('purchasePriceRefHint',''); setHint('salePriceHint',''); setHint('saleDateHint',''); setHint('quantityHint',''); setHint('marketplaceLinkHint','');
-    const modalContentEl = document.querySelector('#itemModal .modal-content');
-    const advancedFields = document.querySelector('#itemModal .advanced-fields');
-    if (modalContentEl && modalContentEl.classList.contains('expanded')) { modalContentEl.classList.remove('expanded'); }
-    if (advancedFields && !advancedFields.classList.contains('hidden')) { advancedFields.classList.add('hidden'); }
-    const toggleAdvancedBtn = document.getElementById('toggleAdvancedBtn');
-    if (toggleAdvancedBtn) toggleAdvancedBtn.textContent = 'Altre informazioni';
-    updateRefCurrencyLabel();
-
-    const modal = document.getElementById('itemModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const itemId = document.getElementById('itemId');
-    const itemName = document.getElementById('itemName');
-    const itemDescription = document.getElementById('itemDescription');
-    const itemLanguage = document.getElementById('itemLanguage');
-    const itemCategory = document.getElementById('itemCategory');
-    const purchasePrice = document.getElementById('purchasePrice');
-    const purchaseDate = document.getElementById('purchaseDate');
-    const salePrice = document.getElementById('salePrice');
-    const saleDate = document.getElementById('saleDate');
-    const itemTags = document.getElementById('itemTags');
-    const quantity = document.getElementById('quantity');
-    const condition = document.getElementById('condition');
-    const imageInput = document.getElementById('image');
-    const currencySelect = document.getElementById('currency');
-    const purchasePriceRef = document.getElementById('purchasePriceRef');
-    
-    if (item) {
-        modalTitle.textContent = 'Modifica Item';
-        toggleAdvancedBtn.style="display: flex";
-        itemId.value = item.id;
-        itemName.value = item.name || '';
-        itemDescription.value = item.description || '';
-        itemLanguage.value = item.language || '';
-        itemCategory.value = item.category || '';
-        purchasePrice.value = item.purchase_price !== null && item.purchase_price !== undefined ? item.purchase_price : '';
-        purchaseDate.value = item.purchase_date || '';
-        salePrice.value = item.sale_price !== null && item.sale_price !== undefined ? item.sale_price : '';
-        saleDate.value = item.sale_date || '';
-        itemTags.value = item.tags || '';
-        quantity.value = item.quantity !== null && item.quantity !== undefined ? item.quantity : '1';
-        condition.value = item.condition || '';
-        // Note: non si può impostare il valore dell'input file per motivi di sicurezza
-        imageInput.value = '';
-        currencySelect.value = item.currency || '';
-        // Set purchase price in reference currency if available
-        if (purchasePriceRef) {
-            purchasePriceRef.value = (item.purchase_price_curr_ref !== null && item.purchase_price_curr_ref !== undefined) ? item.purchase_price_curr_ref : '';
-        }
-        // Links Info e MarketPlace
-        // inizializza stati
-        stateInfoLinks = Array.isArray(item?.info_links) ? [...item.info_links] : [];
-        stateMarketplaceLinks = Array.isArray(item?.marketplace_links) ? [...item.marketplace_links] : [];
-        // Render Link già presenti
-        renderLinks(stateInfoLinks, 'infoLinksItemList');
-        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
-        // pulisci input
-        const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
-        const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
-        // Render MarketParamsFields
-        if (item && item.market_params) {
-            renderMarketParamsFields(Array.isArray(item?.market_params) ? [...item.market_params] : []);
-        } else {
-            renderMarketParamsFields();
-        }
-    } else {
-        modalTitle.textContent = 'Nuovo Item';
-        toggleAdvancedBtn.style="display: None";
-        clearItemForm();
-        // Nascondi toggleAdvancedBtn 
-        // Reset reference price field
-        if (purchasePriceRef) purchasePriceRef.value = '';
-    }
-    modal.classList.remove('hidden');
-    
-    document.getElementById('itemCategory')?.addEventListener('change', () => {
-        renderMarketParamsFields();
-    });
-}
-
-function closeModal() {
-    const modal = document.getElementById('itemModal');
-    stateInfoLinks = [];
-    stateMarketplaceLinks = [];
-    modal.classList.add('hidden');
-}
-
-function clearItemForm() {
-    document.getElementById('itemId').value = '';
-    document.getElementById('itemName').value = '';
-    document.getElementById('itemDescription').value = '';
-    document.getElementById('itemLanguage').value = '';
-    document.getElementById('itemCategory').value = '';
-    document.getElementById('purchasePrice').value = '';
-    document.getElementById('purchaseDate').value = '';
-    document.getElementById('salePrice').value = '';
-    document.getElementById('saleDate').value = '';
-    document.getElementById('itemTags').value = '';
-    document.getElementById('quantity').value = '1';
-    document.getElementById('condition').value = '';
-    document.getElementById('image').value = '';
-    document.getElementById('currency').value = '';
-    const refInput = document.getElementById('purchasePriceRef');
-    if (refInput) refInput.value = '';
 }
 
 function renderPriceChartingSection(item){
@@ -1006,171 +521,6 @@ function renderSecondaryMarketSection(item){
     return None
 }
 
-function openViewModal(item){
-    
-    const m = document.getElementById('viewItemModal');
-    const set = (id, val) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (el.tagName === 'A') {
-        if (val) { el.href = val; el.textContent = 'Apri annuncio'; el.style.display='inline'; }
-        else      { el.href = '#'; el.textContent = '—'; el.style.display='none'; }
-    } else {
-        el.textContent = val || '—';
-    }
-    };
-    document.getElementById('viewName').textContent = item.name || '(senza nome)';
-    //document.getElementById('viewSubtitle').textContent = (item.category||'') + (item.language?(' · '+item.language):'');
-    const img = document.getElementById('viewImage');
-    img.src = item.image_path ? `/static/${item.image_path}` : '';
-    img.style.display = item.image_path ? 'block' : 'none';
-
-    set('viewCategory',     item.category);
-    set('viewLanguage',     item.language);
-    set('viewCondition',    item.condition);
-    set('viewDescription',  item.description);
-    set('viewPurchase',     item.purchase_price!=null ? fmtMoney(item.purchase_price, item.currency) : null);
-    set('viewPurchaseDate', item.purchase_date);
-    const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `—`;
-    (function(){ try { if (item.purchase_date) { const d=new Date(item.purchase_date); const now=new Date(); const days=Math.floor((now - d)/(1000*60*60*24)); const el=document.getElementById('viewDaysInCollection'); if (el) el.textContent = `${days} giorni`; } } catch(e){} })();
-    set('viewSale',         item.sale_price!=null ? fmtMoney(item.sale_price, item.currency) : null);
-    set('viewSaleDate',     item.sale_date);
-    set('viewLink',         item.marketplace_link);
-    set('viewTags',         item.tags);
-    (function(){ const el=document.getElementById('viewToken'); if (!el) return; if (item.token) { el.textContent=item.token; el.style.display='inline-flex'; } else { el.textContent=''; el.style.display='none'; } })();
-
-    // Info links (item level)
-    const infoLinksArr = Array.isArray(item.info_links) ? item.info_links : [];
-    renderLinkList(infoLinksArr, 'viewInfoLinks');
-
-    // Market links (item level) + fallback ad eventuale campo legacy
-    let marketArr = Array.isArray(item.marketplace_links) ? item.marketplace_links : [];
-    renderLinkList(marketArr, 'viewMarketplaceLinks');
-
-    // Reset stima e apri
-    document.getElementById('estContent').innerHTML = '<em>Caricamento stima in corso…</em>';
-    document.getElementById('estSource').textContent = '';
-    m.classList.remove('hidden');
-    renderChips(item);
-    renderTagPills(item);
-
-    // Chiamata ad eBay
-    fetch(`/api/ebay-estimate?item_id=${item.id}`)
-    .then(r => r.json())
-    .then(data => {
-      const est = document.getElementById('estContent');
-      const src = document.getElementById('estSource');
-      const query = document.getElementById('estQuery');
-      if (data && data.query) {
-        const qurl = data.query.url || 'eBay';
-        const params = data.query.params || {};
-        const kw = params.keywords || '';
-        src.textContent = `· Fonte: eBay (${qurl})"`;
-        query.textContent = `· Query: "${kw}"`;
-      }
-
-      if (data && data.stats) {
-        const c = data.stats.currency || '';
-        const parts = [];
-        if (data.stats.avg    != null) parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg, c)}</span>`);
-        if (data.stats.median != null) parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median, c)}</span>`);
-        if (data.stats.min    != null && data.stats.max != null) parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min, c)} – ${fmtMoney(data.stats.max, c)}</span>`);
-        parts.push(`<span class="pill"><strong>Campioni</strong> ${(data.stats.count||0)}</span>`);
-        est.innerHTML = parts.join(' ');
-
-        if (data.samples && data.samples.length) {
-          const links = data.samples.map(s => `<a href="${s.url}" target="_blank" rel="noopener">${s.title || 'venduto'}</a>`).join(' · ');
-          const samples = document.createElement('div');
-          samples.className = 'samples';
-          samples.innerHTML = `<div>Esempi recenti: ${links}</div>`;
-          est.appendChild(samples);
-        }
-      } else {
-        est.innerHTML = '<em>Nessuna stima disponibile.</em>';
-      }
-    })
-    .catch(() => {
-      document.getElementById('estContent').innerHTML = '<em>Impossibile recuperare la stima al momento.</em>';
-    });
-    // Chiamata in base a categoria
-    renderSecondaryMarketSection(item)
-
-    const viewItemClose = document.getElementById('viewItemClose');
-    const viewItemModal = document.getElementById('viewItemModal');
-    viewItemClose?.addEventListener('click', () => viewItemModal?.classList.add('hidden'));
-}
-
-// === Inline validation & conversion ===
-function setHint(id, msg, cls='') {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = msg || '';
-    el.classList.remove('error','warn','ok');
-    if (cls) el.classList.add(cls);
-}
-
-async function updateConversion() {
-    const priceEl = document.getElementById('purchasePrice');
-    const curEl = document.getElementById('currency');
-    const refEl = document.getElementById('purchasePriceRef');
-    const lbl = document.getElementById('refCurrencyLabel');
-    if (!priceEl || !curEl || !refEl) return;
-    const amount = parseFloat(priceEl.value);
-    const from = curEl.value || 'EUR';
-    const to = (USER_REF_CURRENCY || 'EUR');
-    if (!amount || isNaN(amount)) {
-        setHint('purchasePriceRefHint','', '');
-        return;
-    }
-    try {
-        const q = new URLSearchParams({ amount: amount.toString(), from, to }).toString();
-        const res = await fetch(`/api/convert?${q}`);
-        if (res.ok) {
-            const data = await res.json();
-            if (typeof data.result === 'number') {
-                refEl.value = data.result.toFixed(2);
-                setHint('purchasePriceRefHint', `≈ ${data.result.toFixed(2)} ${to}`, 'ok');
-            } else {
-                setHint('purchasePriceRefHint','Conversione non disponibile', 'warn');
-            }
-        } else {
-            setHint('purchasePriceRefHint','Errore conversione', 'warn');
-        }
-    } catch (e) {
-        setHint('purchasePriceRefHint','Errore rete conversione', 'warn');
-    }
-}
-
-function validateFields() {
-    // Prezzi
-    const p = parseFloat(document.getElementById('purchasePrice').value);
-    const s = parseFloat(document.getElementById('salePrice').value);
-    if (p < 0) setHint('purchasePriceHint','Il prezzo di acquisto non può essere negativo','error');
-    else if (p === 0) setHint('purchasePriceHint','Zero? Verifica se è corretto','warn');
-    else setHint('purchasePriceHint','', '');
-
-    if (s < 0) setHint('salePriceHint','Il prezzo di vendita non può essere negativo','error');
-    else setHint('salePriceHint','', '');
-
-    // Date
-    const pd = document.getElementById('purchaseDate').value ? new Date(document.getElementById('purchaseDate').value) : null;
-    const sd = document.getElementById('saleDate').value ? new Date(document.getElementById('saleDate').value) : null;
-    const today = new Date(); today.setHours(0,0,0,0);
-    if (pd && pd > today) setHint('purchaseDateHint','La data di acquisto è nel futuro','warn');
-    else setHint('purchaseDateHint','', '');
-    if (sd && pd && sd < pd) setHint('saleDateHint','La data di vendita è precedente alla data di acquisto','warn');
-    else setHint('saleDateHint','', '');
-
-    // Quantità
-    const q = parseInt(document.getElementById('quantity').value || '1', 10);
-    if (q < 1) setHint('quantityHint','La quantità deve essere almeno 1','error');
-    else setHint('quantityHint','', '');
-}
-
-function fmtMoney(v, cur){ if (v==null || isNaN(Number(v))) return '-'; return Number(v).toFixed(2) + (cur?(' '+cur):''); }
-
-
-
 function drawHistoryChart(rows){
   const canvas = document.getElementById('estChart'); if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -1197,45 +547,6 @@ function drawHistoryChart(rows){
   // labels
   ctx.fillStyle = '#64748b'; ctx.font = '11px sans-serif';
   ctx.fillText(yMin.toFixed(2), 4, yScale(yMin)); ctx.fillText(yMax.toFixed(2), 4, yScale(yMax));
-}
-
-function renderChips(item){
-  const chips = document.getElementById('viewChips');
-  if (!chips) return;
-  chips.innerHTML = '';
-  const mk = (label, value, icon) => {
-    if (!value) return null;
-    const el = document.createElement('span'); el.className='chip';
-    el.innerHTML = (icon?`<span class="icon">${icon}</span>`:'') + `<strong>${label}</strong> ${value}`;
-    return el;
-  };
-  const icons = {
-    category: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M10 4H4v6h6V4zm10 0h-6v6h6V4zM10 14H4v6h6v-6zm10 0h-6v6h6v-6z"/></svg>',
-    language: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 3l2.2 6H21l-5.6 4 2.2 6L12 15l-5.6 4 2.2-6L3 9h6.8L12 3z"/></svg>',
-    condition:'<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 21l-6-6 1.41-1.41L9 18.17l10.59-10.6L21 9l-12 12z"/></svg>',
-    token:    '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2l4 4-4 4-4-4 4-4zm0 12l4 4-4 4-4-4 4-4z"/></svg>'
-  };
-  const list = [
-    mk('Categoria', item.category, icons.category),
-    mk('Lingua', item.language, icons.language),
-    mk('Condizione', item.condition, icons.condition),
-    mk('Token', item.token, icons.token),
-  ].filter(Boolean);
-  list.forEach(el => chips.appendChild(el));
-}
-
-function renderTagPills(item){
-  const tgt = document.getElementById('viewTagList');
-  if (!tgt) return;
-  tgt.innerHTML = '';
-  const tags = (item.tags || '').split('#').map(s=>s.trim()).filter(Boolean);
-  tags.forEach(t => {
-    const el = document.createElement('span'); el.className='tag-pill'; el.textContent = t;
-    tgt.appendChild(el);
-  });
-  // If we rendered tag pills, hide the legacy Tag row (if present)
-  const legacy = document.querySelector('.hide-when-chips');
-  if (legacy) legacy.style.display = tags.length ? 'none' : '';
 }
 
 function parseMarketParams(mp){
@@ -1302,67 +613,13 @@ async function saveInfoLinks(){
 })(); */
 
 
-// Stato locale della modale
-let stateInfoLinks = [];
-let stateMarketplaceLinks = [];
 
 
-//
-function hostFromUrl(u){
-  try { return new URL(u).hostname.replace(/^www\./,''); }
-  catch { return ''; }
-}
 
-// Mini set di SVG inline per i brand più comuni (fallback a favicon Google S2)
-const BRAND_SVG = {
-  'ebay': `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>`,
-  'vinted': `<svg viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="20" x="2" y="2" rx="5"/></svg>`,
-  'subito': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18"/></svg>`,
-  'discogs': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18"/></svg>`,
-  'catawiki': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/></svg>`,
-  'stockx': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5M5 5l14 14"/></svg>`,
-  'etsy': `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>`,
-  'amazon': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18c5 4 13 4 18 0"/></svg>`,
-  'wallapop': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20"/></svg>`,
-  'facebook': `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20"/></svg>`,
-  'depop': `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/></svg>`
-};
 
-function brandKeyFromHost(host){
-  const h = host.toLowerCase();
-  if (h.includes('ebay')) return 'ebay';
-  if (h.includes('vinted')) return 'vinted';
-  if (h.includes('subito')) return 'subito';
-  if (h.includes('discogs')) return 'discogs';
-  if (h.includes('catawiki')) return 'catawiki';
-  if (h.includes('stockx')) return 'stockx';
-  if (h.includes('etsy')) return 'etsy';
-  if (h.includes('amazon')) return 'amazon';
-  if (h.includes('wallapop')) return 'wallapop';
-  if (h.includes('facebook') || h.includes('fb')) return 'facebook';
-  if (h.includes('depop')) return 'depop';
-  return null;
-}
 
-function iconHtmlFor(url){
-  const host = hostFromUrl(url);
-  const key = brandKeyFromHost(host);
-  //if (key && BRAND_SVG[key]) return BRAND_SVG[key];
-  // fallback su favicon Google
-  return `<img class="favicon" src="https://www.google.com/s2/favicons?domain=${host}" alt="">`;
-}
 
-function renderLinkList(urls, containerId){
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  if (!Array.isArray(urls) || urls.length === 0){
-    el.innerHTML = '<span class="muted">Nessun link</span>';
-    return;
-  }
-  el.innerHTML = urls.map(u => {
-    const host = hostFromUrl(u) || u;
-    return `<a class="link-item" href="${u}" target="_blank" rel="noopener">
-              ${iconHtmlFor(u)}<span>${host}</span>
-            </a>`;
-  }).join('');
-}
+
+
+
+
