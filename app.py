@@ -1796,6 +1796,8 @@ def create_app(db_path: str = "database.db") -> Flask:
         except Exception as e:
             return jsonify({'error': str(e), 'query': query_used}), 200
 
+    # GLOBAL CATALOG
+
     @app.route('/api/global-catalog/ensure-or-resolve', methods=['POST'])
     @require_login
     def api_gc_ensure_or_resolve():
@@ -1812,20 +1814,21 @@ def create_app(db_path: str = "database.db") -> Flask:
     @require_login
     def api_gc_info():
         data = request.get_json(silent=True) or {}
-        gid = data.get('global_id') or ''
+        gid = data.get('gid') or ''
         # Legge market_params & category dal GC
         conn = db.get_db_connection(app.config['DATABASE'])
         cur = conn.cursor()
-        cur.execute("SELECT category, market_params, canonical_name FROM global_catalog WHERE id=?", (gid,))
+        cur.execute("SELECT category, market_params, canonical_name, catalog_key FROM global_catalog WHERE id=?", (gid,))
         row = cur.fetchone(); conn.close()
         if not row:
             return jsonify({'error':'Global not found'}), 404
         category = row['category'] if isinstance(row, dict) else row[0]
-        canonical_name = row['canonical_name'] if isinstance(row, dict) else row[0]
+        canonical_name = row['canonical_name'] if isinstance(row, dict) else row[2]
+        catalog_key = row['catalog_key'] if isinstance(row, dict) else row[3]
         mp = json.loads((row['market_params'] if isinstance(row, dict) else row[1]) or "{}")
         name_hint = (mp.get('title') or mp.get('name') or '').strip()
         
-        return jsonify({'mp': mp,'category':category,'canonical_name': canonical_name,'gid': gid}), 200
+        return jsonify({'mp': mp,'category':category,'canonical_name': canonical_name,'gid': gid, 'catalog_key': catalog_key}), 200
         results = {}
 
         # --- eBay (derivato dal tuo /api/ebay-estimate) ---
@@ -1998,7 +2001,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             return jsonify({'error': 'Unauthorized'}), 401
         return dashboard.api_dashboard_trend(app.config['DATABASE'])
 
-    # GLOBAL CATALOG
+   
     
 
 

@@ -46,6 +46,10 @@
             <!-- Sezione avanzata: gruppi tematici -->
             <div class="modal-section advanced-fields hidden">
 
+                <h3 class="section-title">Foto</h3>
+                <input type="file" id="image" accept="image/*"
+                       title="Immagine — Carica una foto per l'item.">
+
                 <h3 class="section-title">Dettagli</h3>
                 <div class="hstack">
                     <div style="vertical-align: auto; align-items: center;">
@@ -69,17 +73,17 @@
                         </select>
                     </div>
                 </div>
+
                 <small class="hint-field">Link Info</small>
-                <div id="infoLinksItemSection" class="section-grid advanced-grid">
-                    
-                <div class="full">
-                    <div class="hstack">
-                    <input type="url" id="infoLinkItemInput" placeholder="https://…" />
-                    <button id="btnAddInfoLinkItem" class="btn small" title="Aggiungi link">+</button>
+                <div id="infoLinksItemSection" class="section-grid advanced-grid">   
+                    <div class="full">
+                        <div class="hstack">
+                            <input type="url" id="infoLinkItemInput" placeholder="https://…" />
+                            <button id="btnAddInfoLinkItem" class="btn small" title="Aggiungi link">+</button>
+                        </div>
+                        <div id="infoLinksItemList" class="links-list"></div>
+                        <small class="hint">Questi link sono legati all’<strong>item</strong> (non al catalogo globale).</small>
                     </div>
-                    <div id="infoLinksItemList" class="links-list"></div>
-                    <small class="hint">Questi link sono legati all’<strong>item</strong> (non al catalogo globale).</small>
-                </div>
                 </div>
 
                 <h3 class="section-title">Acquisto</h3>
@@ -96,7 +100,6 @@
                                 <option value="CNY">CNY</option>
                             </select>
                         </div>
-                        
                     </div>
                     <div style="vertical-align: auto; align-items: center;">
                         <small class="hint-field">Data Acquisto</small>
@@ -126,29 +129,28 @@
                     <div style="vertical-align: auto; align-items: center;">
                         <small class="hint-field">Data Vendita</small>
                         <input type="date" id="saleDate" placeholder="Data di vendita" title="Data di vendita — Quando è stato venduto (se venduto).">
-                    <div class="hint" id="saleDateHint"></div>
+                        <div class="hint" id="saleDateHint"></div>
+                    </div>
                 </div>
-                </div>
 
-
-                <h3 class="section-title">Foto</h3>
-                <input type="file" id="image" accept="image/*"
-                       title="Immagine — Carica una foto per l'item.">
-
-                <h3 class="section-title">Link marketplace (Item)</h3>
+                <h3 class="section-title">Link Marketplace</h3>
                 <div id="marketplaceLinksItemSection" class="section-grid advanced-grid">
                 <div class="full">
                     <div class="hstack">
-                    <input type="url" id="marketplaceLinkItemInput" placeholder="https:// (inserisci URL annuncio / vendita)" />
-                    <button id="btnAddMarketplaceLinkItem" class="btn small" title="Aggiungi link">+</button>
+                        <input type="url" id="marketplaceLinkItemInput" placeholder="https:// (inserisci URL annuncio / vendita)" />
+                        <button id="btnAddMarketplaceLinkItem" class="btn small" title="Aggiungi link">+</button>
+                        </div>
+                        <div id="marketplaceLinksItemList" class="links-list"></div>
+                        <small class="hint">Puoi inserire più link (eBay, Vinted, Subito, ecc.).</small>
                     </div>
-                    <div id="marketplaceLinksItemList" class="links-list"></div>
-                    <small class="hint">Puoi inserire più link (eBay, Vinted, Subito, ecc.).</small>
-                </div>
-                </div>
+                </div>  
 
+                <div id ="badgerow" style="display: inline-flex; vertical-align: middle;">
+                    <h3 class="section-title">Canonical Item Info</h3>
+                </div>
                 <div id="marketParamsFields" class="mp-grid"></div>
             </div>
+
             <button type="submit" class="icon-btn primary">Salva</button>
         </form>
     </div>

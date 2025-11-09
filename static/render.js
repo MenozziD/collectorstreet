@@ -101,7 +101,7 @@ async function renderEditModal(USER_REF_CURRENCY,item = null) {
     modal.classList.remove('hidden');
     
     document.getElementById('itemCategory')?.addEventListener('change', () => {
-        renderMarketParamsFields();
+        //renderMarketParamsFields();
     });
 }
 
@@ -173,6 +173,7 @@ function closeModal() {
     const modal = document.getElementById('itemModal');
     gstateInfoLinks = [];
     gstateMarketplaceLinks = [];
+    if (document.getElementById('gcStatusRow')) document.getElementById('gcStatusRow').remove();
     modal.classList.add('hidden');
 }
 
@@ -417,11 +418,23 @@ async function renderMarketParamsView(gid) {
   const jsn = await r.json();
 
   const container = document.getElementById('marketParamsFields');
+  // layout: righe che vanno a capo
+  container.style.display   = 'flex';
+  container.style.flexWrap  = 'wrap';
+  container.style.columnGap = '12px';
+  container.style.rowGap    = '8px';
+  container.style.width     = '100%';
+
+  const statusRow = document.createElement('div');
+  const badgerow = document.getElementById('badgerow');
+  statusRow.id = 'gcStatusRow';
+  statusRow.style.margin = '4px 0 8px';
+  renderGlobalLinkBadge(statusRow, jsn.catalog_key);
+  badgerow.appendChild(statusRow);
+
   const category = normalizeCategory(document.getElementById('itemCategory').value);
   container.innerHTML = '';
 
-  
-  const wrap = document.createElement('div');
   
   const catRaw = document.getElementById('itemCategory')?.value || '';
   const catKey = normalizeCategory(catRaw);
@@ -430,12 +443,14 @@ async function renderMarketParamsView(gid) {
   // Valori esistenti (object) se passati o presi dai campi attuali
   const existingObj = jsn.mp;
 
-  wrap.innerHTML = '';
   schema.forEach(f => {
       const div = document.createElement('div');
-      //div.style = "width: 40%; padding-right: 0%; margin-right: 0%; border-right:0%;";
-      //div.className = 'field';
-
+      div.style.display        = 'flex';
+      div.style.flexDirection  = 'column';
+      div.style.gap            = '4px';
+      div.style.flex           = '0 0 calc((100% - 12px)/2)'; // 12px è il columnGap
+      div.style.maxWidth       = '420px';       // opzionale: non allargare troppo
+      
       const inputId = 'mp_' + f.key;
       const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
 
@@ -450,11 +465,13 @@ async function renderMarketParamsView(gid) {
       input.id = inputId;
       input.placeholder = f.placeholder || '';
       input.value = val || '';
+      input.style.width = '100%';
+      input.disabled = true;
 
       div.append(label, input);
-      wrap.appendChild(div);      
+      container.appendChild(div);      
   });
-  container.appendChild(wrap);
+  //container.appendChild(wrap);
 
   // utility per hidden fields necessari al submit
   function ensureHidden(id) {
@@ -470,6 +487,20 @@ async function renderMarketParamsView(gid) {
   }
 
   ensureHidden('gcLinkedGlobalId'); // creato, vuoto
+}
+
+async function renderGlobalLinkBadge(targetEl, value){
+  if (!targetEl) return;
+  targetEl.innerHTML = '';
+  if (!value) return;
+
+  targetEl.innerHTML = `
+    <span class="gc-badge gc-badge--success" title="${value ? ('Collegato a: '+value) : 'Collegato al catalogo globale'}">
+      <span class="dot"></span>
+      <span>${value}</span>
+    </span>
+  `;
+    
 }
 
 function renderLinks(list, containerId){
@@ -701,5 +732,268 @@ function getLinksState()
   };
   return res;
 }
+
+
+
+function renderPriceChartingSection(item){
+    const logo = document.getElementById('2mLogo');
+    logo.style.backgroundColor = "transparent";
+    logo.src = 'https://www.pricecharting.com/images/logo-pricecharting-new.png';
+    const src = document.getElementById('2mSource');
+    const query = document.getElementById('2mQuery');
+    const content = document.getElementById('2mContent');
+  
+    if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+    fetch(`/api/pricecharting-estimate?item_id=${item.id}`)
+        .then(r => r.json())
+        .then(data => {
+        if (!content) return;
+        if (data && data.query){
+            const qurl = data.query.url || 'PriceCharting';
+            const params = data.query.params || {};
+            const q = params.q || '';
+            src.textContent = `· Fonte: PriceCharting (${qurl})"`;
+            query.textContent = `· Query: "${q}"`;
+            
+        }
+        if (data && data.prices) {
+        const c = data.prices.currency || '';
+        const parts = [];
+        if (data.product && (data.product.product_name || data.product.console_name)) {
+            const meta = [];
+            if (data.product.product_name) meta.push(data.product.product_name);
+            if (data.product.console_name) meta.push(`(${data.product.console_name})`);
+            parts.push(`<span class="pill"><strong>Prodotto</strong> ${meta.join(' ')}</span>`);
+        }
+        if (data.prices.loose != null) parts.push(`<span class="pill"><strong>Loose</strong> ${fmtMoney(data.prices.loose, c)}</span>`);
+        if (data.prices.cib   != null) parts.push(`<span class="pill"><strong>CIB</strong> ${fmtMoney(data.prices.cib, c)}</span>`);
+        if (data.prices.new   != null) parts.push(`<span class="pill"><strong>New</strong> ${fmtMoney(data.prices.new, c)}</span>`);
+        if (data.prices.retail_loose_sell != null) parts.push(`<span class="pill"><strong>Retail Loose Sell</strong> ${fmtMoney(data.prices.retail_loose_sell, c)}</span>`);
+        if (data.prices.retail_cib_sell   != null) parts.push(`<span class="pill"><strong>Retail CIB Sell</strong> ${fmtMoney(data.prices.retail_cib_sell, c)}</span>`);
+        if (data.prices.retail_new_sell   != null) parts.push(`<span class="pill"><strong>Retail New Sell</strong> ${fmtMoney(data.prices.retail_new_sell, c)}</span>`);
+        content.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
+      } else {
+        const msg = data && data.error ? `Errore PriceCharting: ${data.error}` : 'Nessuna stima disponibile.';
+        content.innerHTML = `<em>${msg}</em>`;
+      }
+    })
+    .catch(() => { if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
+function renderJustTCGSection(item){
+  const logo = document.getElementById('2mLogo');
+  logo.style.backgroundColor = "transparent";
+  logo.src = 'https://miro.medium.com/v2/resize:fit:640/format:webp/1*ZPbRrX5X8kQP8x_LDF1Fww.png';  
+  const content = document.getElementById('2mContent');
+  const query = document.getElementById('2mQuery');
+  const src = document.getElementById('2mSource');
+
+  if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+  fetch(`/api/justtcg-estimate?item_id=${item.id}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!content) return;
+      if (data && data.query){
+        const q   = (data.query.params && (data.query.params.q || '')) || '';
+        const g   = (data.query.params && data.query.params.game) ? ` · Gioco: ${data.query.params.game}` : '';
+        src.textContent = `· Fonte: JustTCG (${data.query.url})`;
+        query.textContent = `· Query: "${q}"`;
+        if (data.error) src.textContent += `· Error: ${data.error}`;
+      }
+      const parts = [];
+      if (data.card && (data.card.name || data.card.set_name)){
+        const meta = [];
+        if (data.card.name) meta.push(data.card.name);
+        if (data.card.set_name) meta.push(`(${data.card.set_name})`);
+        if (data.card.number) meta.push(`#${data.card.number}`);
+        parts.push(`<span class="pill"><strong>Carta</strong> ${meta.join(' ')}</span>`);
+      }
+
+      const vars = data.variants || [];
+      const c = 'USD';
+      const pick = (cond, print) => vars.find(v => v.condition === cond && v.printing === print);
+
+      // combo più utili
+      const combos = [
+        ['Near Mint','Normal','NM Normal'],
+        ['Lightly Played','Normal','LP Normal'],
+        ['Near Mint','Foil','NM Foil'],
+        ['Lightly Played','Foil','LP Foil']
+      ];
+      combos.forEach(([cond, print, label])=>{
+        const v = pick(cond, print);
+        if (v && v.price != null) parts.push(`<span class="pill"><strong>${label}</strong> ${fmtMoney(v.price, c)}</span>`);
+      });
+
+      // fallback: mostra qualche variante generica
+      if (!vars.length) {
+        parts.push('<em>Nessuna variante disponibile.</em>');
+      } else if (!parts.some(p => p.includes('NM Normal'))) {
+        vars.slice(0,4).forEach(v=>{
+          if (v.price != null) parts.push(`<span class="pill"><strong>${v.condition||'?'} / ${v.printing||'?'}</strong> ${fmtMoney(v.price,c)}</span>`);
+        });
+      }
+
+      if (data.stats){
+        parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg,c)}</span>`);
+        parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median,c)}</span>`);
+        parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min,c)} – ${fmtMoney(data.stats.max,c)}</span>`);
+        parts.push(`<span class="pill"><strong>Campioni</strong> ${data.stats.count||0}</span>`);
+      }
+
+      content.innerHTML = parts.join(' ') || '<em>Nessuna stima disponibile.</em>';
+    })
+    .catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
+function renderPriceLegoSection(item){
+    const logo = document.getElementById('2mLogo');
+    logo.src = 'https://rebrickable.com/static/img/title.png?1692235612.579406';
+    const src = document.getElementById('2mSource');
+    const query = document.getElementById('2mQuery');
+    const content = document.getElementById('2mContent');
+    const cat = (item.category || '').toLowerCase();
+
+  fetch(`/api/lego-estimate?item_id=${item.id}`)
+    .then(r=>r.json()).then(data=>{
+      const best = data && data.best;
+      if (best && best.set_number){
+        appendChip('legoSetCodeChip','Codice LEGO', best.set_number, best.url || null);
+      } else if (data && data.inferred){
+        appendChip('legoSetCodeChip','Codice LEGO (stima)', data.inferred, null);
+      }
+    }).catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
+function renderDiscogsSection(item){
+    const logo = document.getElementById('2mLogo');
+    logo.src = 'https://www.discogs.com/images/discogs-white.png';
+    logo.style.padding = "2px";
+    logo.style.backgroundColor = "#000000";
+    const src = document.getElementById('2mSource');
+    const query = document.getElementById('2mQuery');
+    const content = document.getElementById('2mContent');
+
+    if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>';
+    if (src) src.textContent='';
+    if (query) src.textContent='';
+
+    fetch(`/api/discogs-estimate?item_id=${item.id}`).then(r=>r.json()).then(data=>{
+        if (!content) return;
+        if (data && data.query)
+        {
+            
+            const qurl = data.query.releases_lookup.url || 'Discogs Search';
+            const qparams = data.query.params || {};
+            const q = qparams.q || '';
+            const release = data.release;
+            const error = data.error || null
+            if (error)  
+            {
+                src.textContent = `· Error: (${error})`;
+                throw error;
+            }
+            //const rel = data.query.releases_lookup.id ? ` · Release ID #${data.query.releases_lookup.id}` : '';
+            //const psu = data.query.price_suggestions_url ? ` · PriceSuggestions: ${data.query.price_suggestions_url}` : '';
+            //const psu = '';
+            //src.textContent = `· Fonte: Discogs (${qurl})`;
+            //query.textContent = `· Query: "${q}"${rel}${psu}`;
+            src.textContent = `· Fonte: Discogs (${qurl})`;
+            query.innerHTML = `· Product: <a href="https://www.discogs.com/it/release/${data.query.releases_lookup.id}-${release.artist_names[0]}-${release.title}" target="_blank" rel="noopener">Link</a>`;
+            //query.textContent = `· Product: "https://www.discogs.com/it/release/${data.query.releases_lookup.id}-${release.title}"`;
+        }
+        if (data && data.suggestions)
+        {
+            const parts = [];
+            if (data.release && (data.release.title || data.release.year)){
+                const meta=[]; if (data.release.title) meta.push(data.release.title); if (data.release.year) meta.push(`(${data.release.year})`);
+                if (data.release.formats && data.release.formats.length) meta.push(`[${data.release.formats.join(', ')}]`);
+                parts.push(`<span class="pill"><strong>Release</strong> ${meta.join(' ')}</span>`);
+            }
+            Object.entries(data.suggestions).forEach(([cond,obj])=>{
+                const val = obj && obj.value!=null ? Number(obj.value) : null;
+                if (val!=null) parts.push(`<span class="pill"><strong>${cond}</strong> ${fmtMoney(val,'USD')}</span>`);
+            });
+            if (data.stats){
+                const c = data.stats.currency || 'USD';
+                parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg,c)}</span>`);
+                parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median,c)}</span>`);
+                parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min,c)} – ${fmtMoney(data.stats.max,c)}</span>`);
+                parts.push(`<span class="pill"><strong>Campioni</strong> ${data.stats.count||0}</span>`);
+            }
+            content.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
+        } else
+        {
+            const msg = data && data.error ? `Errore Discogs: ${data.error}` : 'Nessuna stima disponibile.';
+            content.innerHTML = `<em>${msg}</em>`;
+        }
+    }).catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
+function renderStockXSection(item){
+    const logo = document.getElementById('2mLogo');
+    logo.src = 'https://upload.wikimedia.org/wikipedia/commons/5/58/StockX_logo.svg';
+    const src = document.getElementById('2mSource');
+    const query = document.getElementById('2mQuery');
+    const content = document.getElementById('2mContent');
+    if (content) content.innerHTML = '<em>Caricamento stima in corso…</em>'; if (src) src.textContent='';
+    fetch(`/api/stockx-estimate?item_id=${item.id}`)
+        .then(r => r.json())
+        .then(data => {
+        if (!content) return;
+        if (data && data.query){
+            let via = data.query.via || 'StockX'; let info = `Fonte: StockX (${via})`;
+            if (data.query.search){ const qp = data.query.search.params || {}; const q = qp.query || qp._search || ''; if (q) info += ` · Query: "${q}"`; }
+            if (data.query.detail_endpoint) info += ` · Endpoint: ${data.query.detail_endpoint}`;
+            if (data.query.detail && data.query.detail.url) info += ` · Detail: ${data.query.detail.url}`;
+            src.textContent = info;
+        }
+        const parts = [];
+        if (data.product && (data.product.name || data.product.urlKey)) {
+            const meta = []; if (data.product.name) meta.push(data.product.name); if (data.product.urlKey) meta.push(`(${data.product.urlKey})`);
+            parts.push(`<span class="pill"><strong>Modello</strong> ${meta.join(' ')}</span>`);
+        }
+        if (data.market){
+            const c = 'USD';
+            if (data.market.lastSale != null)   parts.push(`<span class="pill"><strong>Last Sale</strong> ${fmtMoney(data.market.lastSale, c)}</span>`);
+            if (data.market.lowestAsk != null)  parts.push(`<span class="pill"><strong>Lowest Ask</strong> ${fmtMoney(data.market.lowestAsk, c)}</span>`);
+            if (data.market.highestBid != null) parts.push(`<span class="pill"><strong>Highest Bid</strong> ${fmtMoney(data.market.highestBid, c)}</span>`);
+            if (data.market.deadstockSold != null) parts.push(`<span class="pill"><strong>Sold 12M</strong> ${data.market.deadstockSold}</span>`);
+            if (data.market.volatility != null)    parts.push(`<span class="pill"><strong>Volatility</strong> ${Number(data.market.volatility).toFixed(2)}</span>`);
+            if (data.market.pricePremium != null)  parts.push(`<span class="pill"><strong>Premium</strong> ${Number(data.market.pricePremium).toFixed(2)}%</span>`);
+        }
+        if (data.stats){
+            const c = data.stats.currency || 'USD';
+            parts.push(`<span class="pill"><strong>Media</strong> ${fmtMoney(data.stats.avg, c)}</span>`);
+            parts.push(`<span class="pill"><strong>Mediana</strong> ${fmtMoney(data.stats.median, c)}</span>`);
+            parts.push(`<span class="pill"><strong>Range</strong> ${fmtMoney(data.stats.min, c)} – ${fmtMoney(data.stats.max, c)}</span>`);
+        }
+        content.innerHTML = parts.length ? parts.join(' ') : '<em>Nessuna stima disponibile.</em>';
+        })
+        .catch(()=>{ if (content) content.innerHTML = '<em>Impossibile recuperare la stima al momento.</em>'; });
+}
+
+function renderSecondaryMarketSection(item){
+    const c = (item.category || '').toLowerCase();
+    const isCard = c.includes('card') || c.includes('tradingcard') || c.includes('cardset');
+    const isShoes = c.includes('shoes') || c.includes('snickers')
+    const isVideo = c.includes('videogiochi') || c.includes('videogames') || c.includes('console');
+    const isDisc  = c === 'cd' || c.includes(' cd') || c.startswith ? false : false;
+    const isVinyl = c.includes('vinyl') || c.includes('vinile') || c.includes('lp');
+    const isLego = c.includes('Lego') || c.includes('lego')
+    if (isVinyl || isDisc)
+        return renderDiscogsSection(item);
+    if (isVideo)
+        return renderPriceChartingSection(item);
+    if (isLego)
+        return renderPriceLegoSection(item);
+    if (isCard)
+        return renderJustTCGSection(item);
+    if (isShoes)
+        return renderStockXSection(item);
+    return None
+}
+
+
 // exporting variables and function
 export {renderEditModal, renderMarketParamsFields, collectMarketParams, renderLinks, updateRefCurrencyLabel, initPrice, setHint, clearItemForm, renderViewModal, fmtMoney, closeModal, addInfoLinks, addMarketLink, getLinksState};
