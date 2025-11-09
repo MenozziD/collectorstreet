@@ -11,10 +11,10 @@ const IDENT_OPTIONS = [
 ];
 
 // Stato locale della modale
-let stateInfoLinks = [];
-let stateMarketplaceLinks = [];
+let gstateInfoLinks = [];
+let gstateMarketplaceLinks = [];
 
-function renderEditModal(USER_REF_CURRENCY,item = null) {  
+async function renderEditModal(USER_REF_CURRENCY,item = null) {  
   // reset label/hints
     updateRefCurrencyLabel(USER_REF_CURRENCY);
     setHint('purchasePriceHint',''); setHint('purchaseDateHint',''); setHint('purchasePriceRefHint',''); setHint('salePriceHint',''); setHint('saleDateHint',''); setHint('quantityHint',''); setHint('marketplaceLinkHint','');
@@ -68,20 +68,28 @@ function renderEditModal(USER_REF_CURRENCY,item = null) {
         }
         // Links Info e MarketPlace
         // inizializza stati
-        const stateInfoLinks = Array.isArray(item?.info_links) ? [...item.info_links] : [];
-        const stateMarketplaceLinks = Array.isArray(item?.marketplace_links) ? [...item.marketplace_links] : [];
+        gstateInfoLinks = Array.isArray(item?.info_links) ? [...item.info_links] : [];
+        gstateMarketplaceLinks = Array.isArray(item?.marketplace_links) ? [...item.marketplace_links] : [];
         // Render Link già presenti
-        renderLinks(stateInfoLinks, 'infoLinksItemList');
-        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+        renderLinks(gstateInfoLinks, 'infoLinksItemList');
+        renderLinks(gstateMarketplaceLinks, 'marketplaceLinksItemList');
         // pulisci input
         const i1 = document.getElementById('infoLinkItemInput'); if (i1) i1.value = '';
         const i2 = document.getElementById('marketplaceLinkItemInput'); if (i2) i2.value = '';
-        // Render MarketParamsFields
-        if (item && item.market_params) {
-            renderMarketParamsFields(Array.isArray(item?.market_params) ? [...item.market_params] : []);
-        } else {
-            renderMarketParamsFields();
+        const global_id = item.global_id;
+        if (item.global_id)
+        {
+          await renderMarketParamsView(global_id);
         }
+        else{
+          // Render MarketParamsFields
+          if (item && item.market_params) {
+              renderMarketParamsFields(Array.isArray(item?.market_params) ? [...item.market_params] : []);
+          } else {
+              renderMarketParamsFields();
+          }
+        }
+
     } else {
         modalTitle.textContent = 'Nuovo Item';
         toggleAdvancedBtn.style="display: None";
@@ -163,8 +171,8 @@ function fmtMoney(v, cur){ if (v==null || isNaN(Number(v))) return '-'; return N
 
 function closeModal() {
     const modal = document.getElementById('itemModal');
-    stateInfoLinks = [];
-    stateMarketplaceLinks = [];
+    gstateInfoLinks = [];
+    gstateMarketplaceLinks = [];
     modal.classList.add('hidden');
 }
 
@@ -221,7 +229,7 @@ function updateRefCurrencyLabel(USER_REF_CURRENCY){
  * @param {string} category Categoria corrente (può essere usata dal renderer manuale)
  * @param {object} currentMarketParams Oggetto esistente dei market params
  */
-function renderMarketParamsFields(currentMarketParams = {}) {
+function renderMarketParamsFields(  currentMarketParams = {}) {
   const container = document.getElementById('marketParamsFields');
   const category = normalizeCategory(document.getElementById('itemCategory').value);
   container.innerHTML = '';
@@ -385,7 +393,7 @@ function renderMarketParamsFields(currentMarketParams = {}) {
     return el;
   }
 
-  // Gestione toggle
+  // Oggetto non legato - Gestione toggle
   const radios = modeWrap.querySelectorAll('input[name="gc_mode"]');
   radios.forEach(r => r.addEventListener('change', () => {
     if (modeWrap.querySelector('input[name="gc_mode"]:checked').value === 'auto') renderAuto();
@@ -400,8 +408,72 @@ function renderMarketParamsFields(currentMarketParams = {}) {
   ensureHidden('gcLinkedGlobalId'); // creato, vuoto
 }
 
+async function renderMarketParamsView(gid) {
+  const r = await fetch('/api/global-catalog/info', 
+  {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({gid: gid})
+  });
+  const jsn = await r.json();
+
+  const container = document.getElementById('marketParamsFields');
+  const category = normalizeCategory(document.getElementById('itemCategory').value);
+  container.innerHTML = '';
+
+  
+  const wrap = document.createElement('div');
+  
+  const catRaw = document.getElementById('itemCategory')?.value || '';
+  const catKey = normalizeCategory(catRaw);
+  const schema = MARKET_HINTS_SCHEMA[catKey] || MARKET_HINTS_SCHEMA['default'];
+
+  // Valori esistenti (object) se passati o presi dai campi attuali
+  const existingObj = jsn.mp;
+
+  wrap.innerHTML = '';
+  schema.forEach(f => {
+      const div = document.createElement('div');
+      //div.style = "width: 40%; padding-right: 0%; margin-right: 0%; border-right:0%;";
+      //div.className = 'field';
+
+      const inputId = 'mp_' + f.key;
+      const val = (existingObj && existingObj[f.key] != null) ? existingObj[f.key] : '';
+
+      const label = document.createElement('small');
+      label.className = 'hint-field'
+      label.htmlFor = inputId;
+      label.title = f.tip || '';
+      label.textContent = f.label;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = inputId;
+      input.placeholder = f.placeholder || '';
+      input.value = val || '';
+
+      div.append(label, input);
+      wrap.appendChild(div);      
+  });
+  container.appendChild(wrap);
+
+  // utility per hidden fields necessari al submit
+  function ensureHidden(id) {
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('input');
+      el.type = 'hidden';
+      el.id = id;
+      el.name = id;
+      container.appendChild(el);
+    }
+    return el;
+  }
+
+  ensureHidden('gcLinkedGlobalId'); // creato, vuoto
+}
 
 function renderLinks(list, containerId){
+
   const listEl = document.getElementById(containerId);
   if (!listEl) return;
   listEl.innerHTML = '';
@@ -412,18 +484,18 @@ function renderLinks(list, containerId){
                       <button type="button" data-idx="${idx}" aria-label="Rimuovi">&times;</button>`;
     listEl.appendChild(chip);
   });
-  listEl.querySelectorAll('button[data-idx]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.getAttribute('data-idx'), 10);
-      if (containerId === 'infoLinksItemList') {
-        stateInfoLinks.splice(i, 1);
-        renderLinks(stateInfoLinks, 'infoLinksItemList');
-      } else {
-        stateMarketplaceLinks.splice(i, 1);
-        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
-      }
-    });
-  });
+  // listEl.querySelectorAll('button[data-idx]').forEach(btn => {
+  //   btn.addEventListener('click', () => {
+  //     const i = parseInt(btn.getAttribute('data-idx'), 10);
+  //     if (containerId === 'infoLinksItemList') {
+  //       stateInfoLinks.splice(i, 1);
+  //       renderLinks(stateInfoLinks, 'infoLinksItemList');
+  //     } else {
+  //       stateMarketplaceLinks.splice(i, 1);
+  //       renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+  //     }
+  //   });
+  // });
 }
 
 function collectMarketParams(){
@@ -597,5 +669,37 @@ function hostFromUrl(u){
   catch { return ''; }
 }
 
+function addMarketLink()
+{
+  const inp = document.getElementById('marketplaceLinkItemInput');
+  const url = (inp?.value || '').trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) { alert('Inserisci un URL che inizi con http:// o https://'); return; }
+  if (!gstateMarketplaceLinks.includes(url))
+    gstateMarketplaceLinks.push(url);
+  inp.value = '';
+  renderLinks(gstateMarketplaceLinks, 'marketplaceLinksItemList');
+}
+
+function addInfoLinks()
+{
+  const inp = document.getElementById('infoLinkItemInput');
+  const url = (inp?.value || '').trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) { alert('Inserisci un URL che inizi con http:// o https://'); return; }
+  if (!gstateInfoLinks.includes(url))
+    gstateInfoLinks.push(url);
+  inp.value = '';
+  renderLinks(gstateInfoLinks, 'infoLinksItemList');
+}
+
+function getLinksState()
+{
+  let res = {
+    InfoLinks: gstateInfoLinks,
+    MarketLink: gstateMarketplaceLinks
+  };
+  return res;
+}
 // exporting variables and function
-export {renderEditModal, renderMarketParamsFields, collectMarketParams, renderLinks, updateRefCurrencyLabel, initPrice, setHint, clearItemForm, renderViewModal, fmtMoney, closeModal};
+export {renderEditModal, renderMarketParamsFields, collectMarketParams, renderLinks, updateRefCurrencyLabel, initPrice, setHint, clearItemForm, renderViewModal, fmtMoney, closeModal, addInfoLinks, addMarketLink, getLinksState};

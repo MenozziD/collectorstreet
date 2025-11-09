@@ -380,7 +380,8 @@ def create_app(db_path: str = "database.db") -> Flask:
                 'fair_value': valuation.get('fair_value'),
                 'price_p05': valuation.get('price_p05'),
                 'price_p95': valuation.get('price_p95'),
-                'valuation_date': valuation.get('valuation_date')
+                'valuation_date': valuation.get('valuation_date'),
+                'global_id': item['global_id'],
             })
         return jsonify(result)
 
@@ -469,8 +470,6 @@ def create_app(db_path: str = "database.db") -> Flask:
         item_id = cur.lastrowid
         conn.close()
         return jsonify({'id': item_id}), 201
-
-
 
     @app.route('/api/items/<int:item_id>', methods=['PUT'])
     @require_login
@@ -566,7 +565,7 @@ def create_app(db_path: str = "database.db") -> Flask:
             fields = []
             values = []
             # Build update list from provided fields
-            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_links', 'info_links', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language', 'market_params']:
+            for key in ['name', 'description', 'category', 'purchase_price', 'purchase_price_curr_ref', 'purchase_date', 'sale_price', 'sale_date', 'marketplace_links', 'info_links', 'tags', 'image_path', 'quantity', 'condition', 'currency', 'language', 'market_params','global_id']:
                 if key in data and data[key] is not None:
                     fields.append(f"{key} = ?")
                     values.append(data[key])
@@ -1809,19 +1808,24 @@ def create_app(db_path: str = "database.db") -> Flask:
         gid = gc.ensure_global_by_identifiers(app.config['DATABASE'],market_params, category, hint_name)
         return jsonify({'global_id': gid}), 200
 
-    @app.route('/api/global-catalog/<int:gid>/refresh', methods=['POST'])
+    @app.route('/api/global-catalog/info', methods=['POST'])
     @require_login
-    def api_gc_refresh(gid):
+    def api_gc_info():
+        data = request.get_json(silent=True) or {}
+        gid = data.get('global_id') or ''
         # Legge market_params & category dal GC
-        conn = db.get_db_connection(); cur = conn.cursor()
-        cur.execute("SELECT category, market_params FROM global_catalog WHERE id=?", (gid,))
+        conn = db.get_db_connection(app.config['DATABASE'])
+        cur = conn.cursor()
+        cur.execute("SELECT category, market_params, canonical_name FROM global_catalog WHERE id=?", (gid,))
         row = cur.fetchone(); conn.close()
         if not row:
             return jsonify({'error':'Global not found'}), 404
         category = row['category'] if isinstance(row, dict) else row[0]
+        canonical_name = row['canonical_name'] if isinstance(row, dict) else row[0]
         mp = json.loads((row['market_params'] if isinstance(row, dict) else row[1]) or "{}")
         name_hint = (mp.get('title') or mp.get('name') or '').strip()
-
+        
+        return jsonify({'mp': mp,'category':category,'canonical_name': canonical_name,'gid': gid}), 200
         results = {}
 
         # --- eBay (derivato dal tuo /api/ebay-estimate) ---

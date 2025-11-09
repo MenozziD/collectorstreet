@@ -1,4 +1,4 @@
-import { renderEditModal, renderViewModal} from './render.js';
+import { renderEditModal, renderViewModal, getLinksState} from './render.js';
 // Mappatura categorie -> icone. Le chiavi sono in minuscolo.
 const categoryIcons = {
     'videogames': 'gamepad.svg',
@@ -122,8 +122,11 @@ async function saveItem() {
         const conditionVal = document.getElementById('condition').value;
         const currency = document.getElementById('currency').value;
         const imageInput = document.getElementById('image');
-        const stateInfoLinks = document.getElementById('infoLinksItemList');
-        const stateMarketplaceLinks = document.getElementById('marketplaceLinksItemList');
+        let resLink = getLinksState();
+        const stateInfoLinks = resLink.InfoLinks;
+        const stateMarketplaceLinks = resLink.MarketLink;
+        //const stateInfoLinks = document.getElementById('infoLinksItemList');
+        //const stateMarketplaceLinks = document.getElementById('marketplaceLinksItemList');
         let res;
         try {
             if (id) {

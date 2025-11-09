@@ -1,5 +1,5 @@
 // import the variables and function from module.js
-import { renderEditModal, renderViewModal, renderMarketParamsFields, renderLinks, collectMarketParams, updateRefCurrencyLabel,initPrice, setHint, clearItemForm, fmtMoney, closeModal } from './render.js';
+import { renderEditModal, renderViewModal, renderMarketParamsFields, renderLinks, collectMarketParams, updateRefCurrencyLabel,initPrice, setHint, clearItemForm, fmtMoney, closeModal, addMarketLink, addInfoLinks } from './render.js';
 import { saveItem,fetchItems,setUser, linkToGlobalCatalog } from './item.js';
 
 let USER_ITEM_VIEW_MODE = 'standard';
@@ -163,7 +163,7 @@ function initApp() {
         let res = await saveItem();
         if (res.ok) {
             if (modalTitle.textContent != 'Nuovo Item')
-                try { linkToGlobalCatalog(); } catch {};
+                try { await linkToGlobalCatalog(); } catch {};
             closeModal();
             clearItemForm();
             fetchItems(USER_ITEM_VIEW_MODE,USER_REF_CURRENCY);
@@ -184,23 +184,11 @@ function initApp() {
     document.addEventListener('click', (e) => {
     if (e.target && e.target.id === 'btnAddInfoLinkItem') {
         e.preventDefault();
-        const inp = document.getElementById('infoLinkItemInput');
-        const url = (inp?.value || '').trim();
-        if (!url) return;
-        if (!/^https?:\/\//i.test(url)) { alert('Inserisci un URL che inizi con http:// o https://'); return; }
-        if (!stateInfoLinks.includes(url)) stateInfoLinks.push(url);
-        inp.value = '';
-        renderLinks(stateInfoLinks, 'infoLinksItemList');
+        addInfoLinks();
     }
     if (e.target && e.target.id === 'btnAddMarketplaceLinkItem') {
         e.preventDefault();
-        const inp = document.getElementById('marketplaceLinkItemInput');
-        const url = (inp?.value || '').trim();
-        if (!url) return;
-        if (!/^https?:\/\//i.test(url)) { alert('Inserisci un URL che inizi con http:// o https://'); return; }
-        if (!stateMarketplaceLinks.includes(url)) stateMarketplaceLinks.push(url);
-        inp.value = '';
-        renderLinks(stateMarketplaceLinks, 'marketplaceLinksItemList');
+        addMarketLink();
     }
     });
 

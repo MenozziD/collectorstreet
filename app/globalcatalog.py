@@ -42,6 +42,7 @@ class gc():
 
         # CREATE (consentito a tutti)
         canonical_name = hlp.generate_canonical_name(category, hint_name)
+        
         cur.execute("""
             INSERT INTO global_catalog (catalog_key, canonical_name, category, identifiers, market_params, info_links, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
