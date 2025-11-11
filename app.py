@@ -1821,7 +1821,7 @@ def create_app(db_path: str = "database.db") -> Flask:
         cur.execute("SELECT category, market_params, canonical_name, catalog_key FROM global_catalog WHERE id=?", (gid,))
         row = cur.fetchone(); conn.close()
         if not row:
-            return jsonify({'error':'Global not found'}), 404
+            return jsonify({'error':'Global not found'}), 999
         category = row['category'] if isinstance(row, dict) else row[0]
         canonical_name = row['canonical_name'] if isinstance(row, dict) else row[2]
         catalog_key = row['catalog_key'] if isinstance(row, dict) else row[3]

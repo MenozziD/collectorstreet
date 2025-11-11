@@ -200,29 +200,39 @@ async function saveItem() {
 }
 
 async function linkToGlobalCatalog(){
-  const itemId = document.getElementById('itemId')?.value;
-  const category = document.getElementById('itemCategory')?.value || '';
-  const mp = collectMarketParams();
-  const hintName = document.getElementById('itemName')?.value || '';
-  try{
+    const itemId = document.getElementById('itemId')?.value;
+    const category = document.getElementById('itemCategory')?.value || '';
+    const mp = collectMarketParams();
+    const hintName = document.getElementById('itemName')?.value || '';
+
+    const requiredKeys = getCategoryIdentKeys(category);
+    const ok_global = hasPrimaryIdent(mp, requiredKeys);
+
+    if (!ok_global) {
+        // Blocchiamo solo il CHECK Global Catalog (non il salvataggio item)
+        alert(buildMissingIdentMessage(category, requiredKeys));
+        return;
+    }
+  
+    try{
     const r = await fetch('/api/global-catalog/ensure-or-resolve', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({category, market_params: mp, hint_name: hintName})
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({category, market_params: mp, hint_name: hintName})
     });
     const jsn = await r.json();
     if (jsn.global_id){
-      // salva sull'item
-      if (itemId){
+        // salva sull'item
+        if (itemId){
         await fetch(`/api/items/${itemId}`, {
-          method:'PUT', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({global_id: jsn.global_id})
+            method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({global_id: jsn.global_id})
         });
-      }
-      alert(`Collegato al Catalogo Globale (ID ${jsn.global_id}).`);
+        }
+        alert(`Collegato al Catalogo Globale (ID ${jsn.global_id}).`);
     } else {
-      alert('Impossibile collegare al Catalogo Globale.');
+        alert('Impossibile collegare al Catalogo Globale.');
     }
-  }catch(e){ alert('Errore collegamento catalogo.'); }
+    }catch(e){ alert('Errore collegamento catalogo.'); }
 }
 
 function collectMarketParams(){
@@ -504,6 +514,46 @@ function populateCategories(items) {
         if (cat === current) option.selected = true;
         select.appendChild(option);
     });
+}
+
+// Mappa delle chiavi "primarie" per categoria (accetta sinonimi)
+function getCategoryIdentKeys(cat) {
+  const c = (cat || '').toLowerCase();
+  switch (c) {
+    case 'lego':
+      return ['lego_set', 'set_number'];
+    case 'videogames':
+    case 'games':
+      return ['pc_id', 'pricecharting_id', 'ean', 'barcode', 'serial', 'serial_number'];
+    case 'music':
+    case 'vinyl':
+    case 'discogs':
+      return ['discogs_id', 'discogs_release_id', 'discogs_master_id', 'ean', 'barcode'];
+    case 'tcg':
+    case 'tradingcard':
+      return ['tcgplayer_id', 'justtcg_id', 'serial', 'serial_number'];
+    case 'sneakers':
+    case 'shoes':
+      return ['stockx_slug', 'urlKey', 'ean', 'barcode', 'serial', 'serial_number'];
+    default:
+      return ['serial', 'serial_number', 'ean', 'barcode'];
+  }
+}
+
+// True se almeno una chiave è presente e valorizzata
+function hasPrimaryIdent(mp, keys) {
+  if (!mp || typeof mp !== 'object') return false;
+  return keys.some(k => {
+    const v = mp[k];
+    return v !== undefined && v !== null && String(v).trim() !== '';
+  });
+}
+
+// Messaggio user-friendly per la categoria corrente
+function buildMissingIdentMessage(cat, keys) {
+  const pretty = keys.join(', ');
+  return `Per collegare l'item al Catalogo Globale è necessario specificare un seriale/ID di categoria (${pretty}).` +
+         `\nProcederò a salvare l'item senza collegamento.`;
 }
 
 // exporting variables and function
